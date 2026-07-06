@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+*.js.map
+
+# Obsidian
+.obsidian/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Temporary
+/tmp/
+*.tmp
