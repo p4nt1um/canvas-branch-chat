@@ -1,26 +1,20 @@
 /**
  * canvas-extension.ts — Canvas 分支对话扩展
  *
- * 负责：
- * 1. 注册 Canvas 右键菜单（分叉 / 追问 / 提交到AI）
- * 2. 对话节点创建与 edge 连线管理
- * 3. 流式 AI 回答渲染到 Canvas 节点
- * 4. 上下文继承（直系祖先链）— M2
- * 5. 分支方向标注 — M2
- *
- * M1 阶段：保留原始 "提交到Ai" 单次 Q&A 能力，
- * 用新的 types / api / utils 重写实现，为 M2 分支逻辑铺路。
+ * P0 功能：
+ * #1 从节点分叉对话
+ * #2 分支方向标注
+ * #3 上下文自动继承（直系祖先链）
+ * #4 边标签显示
  */
 
-import { Menu, MenuItem } from 'obsidian';
+import { Menu, MenuItem, Notice } from 'obsidian';
 import CanvasBranchChatPlugin from './main';
-import {
-  CanvasRuntimeNode,
-  CanvasRuntimeView,
-  CanvasData,
-} from './types';
-import { LLMClient, createLLMClient } from './api';
+import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage } from './types';
+import { createLLMClient } from './api';
 import { getNodeScrollHeight, generateId } from './utils';
+import { BranchModal } from './branch-modal';
+import { buildBranchContext, buildContextFromChain, getAncestorChain } from './context';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -28,7 +22,6 @@ export default class CanvasBranchExtension {
   constructor(plugin: CanvasBranchChatPlugin) {
     this.plugin = plugin;
 
-    // 注册 canvas 右键菜单
     this.plugin.registerEvent(
       this.plugin.app.workspace.on(
         'canvas:node-menu',
@@ -47,30 +40,192 @@ export default class CanvasBranchExtension {
     const canvas = node.canvas;
     if (!canvas) return;
 
-    // 提交到 AI（M1 保留原始行为）
+    // P0 #1: 从此处分叉
     menu.addItem((item: MenuItem) => {
-      item.setTitle('提交到 AI');
+      item.setTitle('🔀 从此处分叉');
+      item.setIcon('git-branch');
+      item.onClick(() => this.branchFromNode(node, canvas));
+    });
+
+    // P0: 继续追问（在当前分支链上追加）
+    menu.addItem((item: MenuItem) => {
+      item.setTitle('💬 继续追问');
+      item.setIcon('message-circle');
+      item.onClick(() => this.continueChat(node, canvas));
+    });
+
+    // 保留原始：直接提交到 AI（不带上下文）
+    menu.addItem((item: MenuItem) => {
+      item.setTitle('🤖 提交到 AI');
       item.setIcon('bot');
       item.onClick(() => this.submitToAi(node, canvas));
     });
-
-    // TODO M2: "从此处分叉" → 弹出分支方向输入框
-    // menu.addItem((item: MenuItem) => {
-    //   item.setTitle('从此处分叉');
-    //   item.setIcon('git-branch');
-    //   item.onClick(() => this.branchFromNode(node, canvas));
-    // });
-
-    // TODO M2: "继续追问" → 在分支链上追加对话
-    // menu.addItem((item: MenuItem) => {
-    //   item.setTitle('继续追问');
-    //   item.setIcon('message-circle');
-    //   item.onClick(() => this.continueChat(node, canvas));
-    // });
   }
 
   // ============================================================
-  // 提交到 AI（M1 核心：单次 Q&A）
+  // P0 #1-#4: 从节点分叉
+  // ============================================================
+
+  private branchFromNode(
+    sourceNode: CanvasRuntimeNode,
+    canvas: CanvasRuntimeView
+  ) {
+    // 弹出分支方向输入框
+    new BranchModal(this.plugin.app, (result) => {
+      if (!result.confirmed) return;
+      this.doBranch(sourceNode, canvas, result.direction);
+    }).open();
+  }
+
+  private async doBranch(
+    sourceNode: CanvasRuntimeNode,
+    canvas: CanvasRuntimeView,
+    direction: string
+  ) {
+    const apiKey = this.plugin.settings.getSetting('apiKey');
+    const model = this.plugin.settings.getSetting('llm');
+    const customInstructions = this.plugin.settings.getSetting('customInstructions');
+
+    if (!apiKey) {
+      new Notice('请先在设置中配置 API Key');
+      return;
+    }
+
+    // 1. 计算分支放置位置（在源节点右侧）
+    // 查找源节点已有的右侧分支，错开摆放
+    const offsetX = 400; // 右侧偏移
+    const offsetY = 100;
+
+    // 2. 创建 AI 回答节点
+    const answerNode = canvas.createTextNode({
+      pos: {
+        x: sourceNode.x + offsetX,
+        y: sourceNode.y + offsetY,
+      },
+      text: '思考中...',
+      size: { width: sourceNode.width, height: sourceNode.height },
+      focus: false,
+    });
+
+    // 3. P0 #4: 创建带标签的连线（source → answer）
+    this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', direction);
+
+    // 4. P0 #3: 构建上下文（直系祖先链 + 分支方向引导）
+    const messages = buildBranchContext(
+      canvas,
+      sourceNode.id,
+      direction,
+      customInstructions
+    );
+
+    // 5. 流式请求 AI
+    const client = createLLMClient('deepseek', apiKey);
+    let fullText = '';
+
+    try {
+      await client.streamChat(messages, model, (token: string) => {
+        fullText += token;
+        answerNode.setText(fullText);
+
+        // 自适应高度
+        this.autoFitHeight(answerNode);
+      });
+    } catch (error) {
+      console.error('Branch Chat: API error', error);
+      answerNode.setText(`❌ 请求失败: ${error}`);
+    }
+
+    // 6. 创建追问输入节点
+    const askNode = canvas.createTextNode({
+      pos: {
+        x: answerNode.x,
+        y: answerNode.y + answerNode.height + 50,
+      },
+      text: '',
+      focus: true,
+    });
+    this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top');
+
+    canvas.requestSave();
+  }
+
+  // ============================================================
+  // P0: 继续追问（在当前分支链上追加对话）
+  // ============================================================
+
+  private async continueChat(
+    sourceNode: CanvasRuntimeNode,
+    canvas: CanvasRuntimeView
+  ) {
+    const apiKey = this.plugin.settings.getSetting('apiKey');
+    const model = this.plugin.settings.getSetting('llm');
+    const customInstructions = this.plugin.settings.getSetting('customInstructions');
+
+    if (!apiKey) {
+      new Notice('请先在设置中配置 API Key');
+      return;
+    }
+
+    const nodeText = sourceNode.text?.trim();
+    if (!nodeText) {
+      new Notice('请先输入你的问题');
+      return;
+    }
+
+    // 1. 创建 AI 回答节点
+    const answerNode = canvas.createTextNode({
+      pos: {
+        x: sourceNode.x,
+        y: sourceNode.y + sourceNode.height + 50,
+      },
+      text: '思考中...',
+      size: { width: sourceNode.width, height: sourceNode.height },
+      focus: false,
+    });
+
+    this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top');
+
+    // 2. 构建上下文（直系祖先链）
+    const chain = getAncestorChain(canvas, sourceNode.id);
+    const historyMessages = buildContextFromChain(canvas, chain);
+
+    const messages: ChatMessage[] = [];
+    if (customInstructions) {
+      messages.push({ role: 'system', content: customInstructions });
+    }
+    messages.push(...historyMessages);
+
+    // 3. 流式请求
+    const client = createLLMClient('deepseek', apiKey);
+    let fullText = '';
+
+    try {
+      await client.streamChat(messages, model, (token: string) => {
+        fullText += token;
+        answerNode.setText(fullText);
+        this.autoFitHeight(answerNode);
+      });
+    } catch (error) {
+      console.error('Branch Chat: API error', error);
+      answerNode.setText(`❌ 请求失败: ${error}`);
+    }
+
+    // 4. 创建下一个追问输入节点
+    const askNode = canvas.createTextNode({
+      pos: {
+        x: answerNode.x,
+        y: answerNode.y + answerNode.height + 50,
+      },
+      text: '',
+      focus: true,
+    });
+    this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top');
+
+    canvas.requestSave();
+  }
+
+  // ============================================================
+  // 原始：直接提交到 AI（无上下文）
   // ============================================================
 
   private async submitToAi(
@@ -82,78 +237,50 @@ export default class CanvasBranchExtension {
     const customInstructions = this.plugin.settings.getSetting('customInstructions');
 
     if (!apiKey) {
-      console.warn('Canvas Branch Chat: API key not configured');
+      new Notice('请先在设置中配置 API Key');
       return;
     }
 
-    // 1. 创建回答节点（Loading 状态）
     const answerNode = canvas.createTextNode({
       pos: {
         x: sourceNode.x,
-        y: sourceNode.y + sourceNode.height + 30,
+        y: sourceNode.y + sourceNode.height + 50,
       },
       text: '思考中...',
       size: { width: sourceNode.width, height: sourceNode.height },
       focus: false,
     });
 
-    // 2. 创建连线
     this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top');
 
-    // 3. 创建追问输入节点（M1：放在回答下方）
-    const askNode = canvas.createTextNode({
-      pos: {
-        x: answerNode.x,
-        y: answerNode.y + answerNode.height + 30,
-      },
-      text: '',
-      focus: false,
-    });
-    this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top');
-
-    // 4. 构建消息
-    const messages = [];
+    const messages: ChatMessage[] = [];
     if (customInstructions) {
-      messages.push({ role: 'system' as const, content: customInstructions });
+      messages.push({ role: 'system', content: customInstructions });
     }
-    messages.push({ role: 'user' as const, content: sourceNode.text });
+    messages.push({ role: 'user', content: sourceNode.text });
 
-    // 5. 创建 LLM 客户端并流式请求
     const client = createLLMClient('deepseek', apiKey);
     let fullText = '';
 
     try {
-      await client.streamChat(
-        messages,
-        model,
-        (token: string) => {
-          fullText += token;
-          answerNode.setText(fullText);
-
-          // 自适应高度
-          const actualHeight = getNodeScrollHeight(answerNode);
-          const nodeData = answerNode.getData();
-          if (actualHeight > nodeData.height) {
-            answerNode.setData({ ...nodeData, height: actualHeight });
-          }
-        }
-      );
+      await client.streamChat(messages, model, (token: string) => {
+        fullText += token;
+        answerNode.setText(fullText);
+        this.autoFitHeight(answerNode);
+      });
     } catch (error) {
-      console.error('Canvas Branch Chat: API error', error);
-      answerNode.setText(`请求失败: ${error}`);
+      console.error('Branch Chat: API error', error);
+      answerNode.setText(`❌ 请求失败: ${error}`);
     }
 
-    // 6. 保存 Canvas
     canvas.requestSave();
   }
 
   // ============================================================
-  // Edge 连线工具
+  // 工具方法
   // ============================================================
 
-  /**
-   * 在两个节点之间创建连线
-   */
+  /** 在两个节点间创建连线，可带标签 */
   private addEdge(
     canvas: CanvasRuntimeView,
     fromNodeId: string,
@@ -174,5 +301,14 @@ export default class CanvasBranchExtension {
       label: label || undefined,
     });
     canvas.setData(canvasData);
+  }
+
+  /** 自适应节点高度 */
+  private autoFitHeight(node: CanvasRuntimeNode): void {
+    const actualHeight = getNodeScrollHeight(node);
+    const nodeData = node.getData();
+    if (actualHeight > nodeData.height) {
+      node.setData({ ...nodeData, height: actualHeight });
+    }
   }
 }
