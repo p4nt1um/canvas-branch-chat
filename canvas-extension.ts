@@ -14,7 +14,7 @@ import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage } from './types';
 import { createLLMClient } from './api';
 import { getNodeScrollHeight, generateId } from './utils';
 import { BranchModal } from './branch-modal';
-import { buildBranchContext, buildContextFromChain, getAncestorChain } from './context';
+import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole } from './context';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -73,14 +73,14 @@ export default class CanvasBranchExtension {
     // 弹出分支方向输入框
     new BranchModal(this.plugin.app, (result) => {
       if (!result.confirmed) return;
-      this.doBranch(sourceNode, canvas, result.direction);
+      this.doBranch(sourceNode, canvas, result.directions);
     }).open();
   }
 
   private async doBranch(
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView,
-    direction: string
+    directions: string[]
   ) {
     const apiKey = this.plugin.settings.resolveApiKey();
     const model = this.plugin.settings.getSetting('llm');
@@ -91,60 +91,74 @@ export default class CanvasBranchExtension {
       return;
     }
 
-    // 1. 计算分支放置位置（在源节点右侧）
-    // 查找源节点已有的右侧分支，错开摆放
-    const offsetX = 400; // 右侧偏移
-    const offsetY = 100;
-
-    // 2. 创建 AI 回答节点
-    const answerNode = canvas.createTextNode({
-      pos: {
-        x: sourceNode.x + offsetX,
-        y: sourceNode.y + offsetY,
-      },
-      text: '思考中...',
-      size: { width: sourceNode.width, height: sourceNode.height },
-      focus: false,
-    });
-
-    // 3. P0 #4: 创建带标签的连线（source → answer）
-    this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', direction);
-
-    // 4. P0 #3: 构建上下文（直系祖先链 + 分支方向引导）
-    const messages = buildBranchContext(
-      canvas,
-      sourceNode.id,
-      direction,
-      customInstructions
-    );
-
-    // 5. 流式请求 AI
-    const client = createLLMClient('deepseek', apiKey);
-    let fullText = '';
-
-    try {
-      await client.streamChat(messages, model, (token: string) => {
-        fullText += token;
-        answerNode.setText(fullText);
-
-        // 自适应高度
-        this.autoFitHeight(answerNode);
-      });
-    } catch (error) {
-      console.error('Branch Chat: API error', error);
-      answerNode.setText(`❌ 请求失败: ${error}`);
+    // 标记源节点为 user（如果未标记）
+    if (!getNodeRole(sourceNode)) {
+      setNodeRole(sourceNode, 'user');
     }
 
-    // 6. 创建追问输入节点
-    const askNode = canvas.createTextNode({
-      pos: {
-        x: answerNode.x,
-        y: answerNode.y + answerNode.height + 50,
-      },
-      text: '',
-      focus: true,
+    const offsetX = 400; // 右侧偏移
+    const nodeSpacing = 80; // 分支间垂直间距
+    const nodeHeight = sourceNode.height || 200;
+
+    // 为每个方向创建 AI 回答节点 + 连线
+    const branches = directions.map((direction, i) => {
+      const yOffset = i * (nodeHeight + nodeSpacing);
+
+      const answerNode = canvas.createTextNode({
+        pos: {
+          x: sourceNode.x + offsetX,
+          y: sourceNode.y + yOffset,
+        },
+        text: '思考中...',
+        size: { width: sourceNode.width, height: sourceNode.height },
+        focus: false,
+      });
+      setNodeRole(answerNode, 'assistant');
+
+      this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', direction);
+
+      const messages = buildBranchContext(
+        canvas,
+        sourceNode.id,
+        direction,
+        customInstructions
+      );
+
+      return { answerNode, messages, direction };
     });
-    this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top');
+
+    // 并行请求所有方向
+    await Promise.allSettled(
+      branches.map(async ({ answerNode, messages }) => {
+        const client = createLLMClient('deepseek', apiKey);
+        let fullText = '';
+
+        try {
+          await client.streamChat(messages, model, (token: string) => {
+            fullText += token;
+            answerNode.setText(fullText);
+            this.autoFitHeight(answerNode);
+          });
+        } catch (error) {
+          console.error('Branch Chat: API error', error);
+          answerNode.setText(`❌ 请求失败: ${error}`);
+        }
+      })
+    );
+
+    // 为每个分支创建追问输入节点
+    for (const branch of branches) {
+      const askNode = canvas.createTextNode({
+        pos: {
+          x: branch.answerNode.x,
+          y: branch.answerNode.y + branch.answerNode.height + 50,
+        },
+        text: '',
+        focus: branches.indexOf(branch) === 0, // 只聚焦第一个
+      });
+      setNodeRole(askNode, 'user');
+      this.addEdge(canvas, branch.answerNode.id, askNode.id, 'bottom', 'top');
+    }
 
     canvas.requestSave();
   }
@@ -172,6 +186,11 @@ export default class CanvasBranchExtension {
       return;
     }
 
+    // 标记源节点为 user（如果未标记）
+    if (!getNodeRole(sourceNode)) {
+      setNodeRole(sourceNode, 'user');
+    }
+
     // 1. 创建 AI 回答节点
     const answerNode = canvas.createTextNode({
       pos: {
@@ -182,6 +201,7 @@ export default class CanvasBranchExtension {
       size: { width: sourceNode.width, height: sourceNode.height },
       focus: false,
     });
+    setNodeRole(answerNode, 'assistant');
 
     this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top');
 
@@ -219,9 +239,8 @@ export default class CanvasBranchExtension {
       text: '',
       focus: true,
     });
+    setNodeRole(askNode, 'user');
     this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top');
-
-    canvas.requestSave();
   }
 
   // ============================================================
@@ -250,6 +269,7 @@ export default class CanvasBranchExtension {
       size: { width: sourceNode.width, height: sourceNode.height },
       focus: false,
     });
+    setNodeRole(answerNode, 'assistant');
 
     this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top');
 

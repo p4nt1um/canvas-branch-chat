@@ -1,6 +1,6 @@
 ---
 title: 我在 Obsidian Canvas 上造了一个分叉对话工具，把 AI 聊天变成思维地图
-cover: https://images.unsplash.com/photo-1454165804606-c3d57bc86b7a?w=900&h=500&fit=crop
+cover: /tmp/cover-cbc.jpg
 ---
 
 # 我在 Obsidian Canvas 上造了一个分叉对话工具，把 AI 聊天变成思维地图

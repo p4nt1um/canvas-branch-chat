@@ -10,6 +10,18 @@
 import { CanvasEdgeData, CanvasTextData } from 'obsidian/canvas';
 
 // ============================================================
+// Canvas 节点数据扩展（角色元数据）
+// ============================================================
+
+/** Canvas 文本节点的对话元数据扩展字段 */
+export interface ChatNodeData extends CanvasTextData {
+  /** 节点对话角色 */
+  chatRole?: 'user' | 'assistant' | 'branch-point';
+  /** 所属分支 ID */
+  chatBranchId?: string;
+}
+
+// ============================================================
 // Canvas 内部运行时类型（canvas:node-menu 回调参数）
 // ============================================================
 

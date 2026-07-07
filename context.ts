@@ -8,7 +8,7 @@
  * MVP 策略：只走直系祖先链，不处理跨分支交汇。
  */
 
-import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, CanvasData } from './types';
+import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, CanvasData, ChatNodeData } from './types';
 
 // ============================================================
 // Canvas 边查找
@@ -88,6 +88,36 @@ export function getNodeText(node: CanvasRuntimeNode): string {
 }
 
 // ============================================================
+// 角色元数据读写
+// ============================================================
+
+/**
+ * 从节点读取对话角色
+ * 
+ * 返回 null 表示未设置（需要 fallback 到奇偶交替推断）
+ */
+export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'branch-point' | null {
+  try {
+    const data = node.getData() as ChatNodeData;
+    return data?.chatRole ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 在节点上写入对话角色元数据
+ */
+export function setNodeRole(node: CanvasRuntimeNode, role: 'user' | 'assistant' | 'branch-point'): void {
+  try {
+    const data = node.getData();
+    node.setData({ ...data, chatRole: role } as any);
+  } catch {
+    // setData 可能失败，忽略
+  }
+}
+
+// ============================================================
 // 直系祖先链遍历
 // ============================================================
 
@@ -123,11 +153,9 @@ export function getAncestorChain(
 /**
  * 从祖先链构建对话消息列表
  *
- * 规则：
- * 1. 跳过空节点（如空的追问输入框）
- * 2. 跳过 "Loading..." / "思考中..." 占位文本
- * 3. 偶数位置 = user，奇数位置 = assistant（按 Canvas 上下顺序交替）
- *    实际更准确的做法是看节点本身的角色元数据，但 M2 阶段先用交替推断
+ * 角色推断优先级：
+ * 1. 节点元数据 chatRole（准确，创建时写入）
+ * 2. 奇偶交替 fallback（兼容无元数据的老节点）
  */
 export function buildContextFromChain(
   canvas: CanvasRuntimeView,
@@ -143,8 +171,17 @@ export function buildContextFromChain(
     if (!text) continue;
     if (text === 'Loading...' || text === '思考中...') continue;
 
-    // 交替推断角色：第一个非空节点 = user，第二个 = assistant，以此类推
-    const role = messages.length % 2 === 0 ? 'user' : 'assistant';
+    // 优先从元数据读取角色
+    const metaRole = getNodeRole(node);
+    let role: 'user' | 'assistant';
+
+    if (metaRole === 'user' || metaRole === 'assistant') {
+      role = metaRole;
+    } else {
+      // Fallback: 奇偶交替推断（兼容老节点）
+      role = messages.length % 2 === 0 ? 'user' : 'assistant';
+    }
+
     messages.push({ role: role as any, content: text });
   }
 
