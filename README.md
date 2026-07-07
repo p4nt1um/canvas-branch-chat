@@ -77,14 +77,22 @@ npm run build
 
 #### API Key（安全方案）
 
-插件**不存储明文密钥**。在设置页填入操作系统环境变量名称，插件从 `process.env` 中读取实际值：
+插件**不会明文存储你的密钥**，而是通过操作系统环境变量读取：
 
-```bash
-# 在你的 shell 配置文件中设置（~/.bashrc / ~/.zshrc / 系统环境变量）
-export DEEPSEEK_API_KEY=sk-your-actual-key-here
-```
+**第一步：在操作系统中设置环境变量**
 
-然后在插件设置中填入 `DEEPSEEK_API_KEY` 即可。
+- **macOS / Linux**：在终端编辑 `~/.bashrc` 或 `~/.zshrc`，添加：
+  ```bash
+  export DEEPSEEK_API_KEY=你的密钥
+  ```
+  保存后执行 `source ~/.bashrc` 生效。
+- **Windows**：搜索「环境变量」→ 系统属性 → 新建用户变量，变量名填 `DEEPSEEK_API_KEY`，值填你的密钥。
+
+设置完成后**重启 Obsidian**，确保环境变量被加载。
+
+**第二步：在插件设置中填入变量名**
+
+只需要填变量名称 `DEEPSEEK_API_KEY`，不需要填真实密钥。
 
 #### 模型配置
 
@@ -170,14 +178,22 @@ Copy the generated `main.js`, `manifest.json`, `styles.css` to the plugin direct
 
 #### API Key (Secure)
 
-The plugin **does not store plaintext keys**. Enter an OS environment variable name in settings; the plugin reads the actual value from `process.env`:
+The plugin **does not store your key in plaintext**. Instead, it reads from OS environment variables:
 
-```bash
-# Set in your shell profile (~/.bashrc / ~/.zshrc / system env vars)
-export DEEPSEEK_API_KEY=sk-your-actual-key-here
-```
+**Step 1: Set the environment variable in your OS**
 
-Then enter `DEEPSEEK_API_KEY` in the plugin settings.
+- **macOS / Linux**: Edit `~/.bashrc` or `~/.zshrc`:
+  ```bash
+  export DEEPSEEK_API_KEY=your-key-here
+  ```
+  Then run `source ~/.bashrc`.
+- **Windows**: Search "Environment Variables" → System Properties → New user variable. Name: `DEEPSEEK_API_KEY`, Value: your key.
+
+**Restart Obsidian** after setting the variable.
+
+**Step 2: Enter the variable name in plugin settings**
+
+Just enter the variable name `DEEPSEEK_API_KEY`, not the actual key.
 
 #### Model
 
