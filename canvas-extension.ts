@@ -82,12 +82,12 @@ export default class CanvasBranchExtension {
     canvas: CanvasRuntimeView,
     direction: string
   ) {
-    const apiKey = this.plugin.settings.getSetting('apiKey');
+    const apiKey = this.plugin.settings.resolveApiKey();
     const model = this.plugin.settings.getSetting('llm');
     const customInstructions = this.plugin.settings.getSetting('customInstructions');
 
     if (!apiKey) {
-      new Notice('请先在设置中配置 API Key');
+      new Notice('请先在设置中配置 API Key（环境变量名）并确保环境变量已设置');
       return;
     }
 
@@ -157,12 +157,12 @@ export default class CanvasBranchExtension {
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView
   ) {
-    const apiKey = this.plugin.settings.getSetting('apiKey');
+    const apiKey = this.plugin.settings.resolveApiKey();
     const model = this.plugin.settings.getSetting('llm');
     const customInstructions = this.plugin.settings.getSetting('customInstructions');
 
     if (!apiKey) {
-      new Notice('请先在设置中配置 API Key');
+      new Notice('请先在设置中配置 API Key（环境变量名）并确保环境变量已设置');
       return;
     }
 
@@ -232,12 +232,12 @@ export default class CanvasBranchExtension {
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView
   ) {
-    const apiKey = this.plugin.settings.getSetting('apiKey');
+    const apiKey = this.plugin.settings.resolveApiKey();
     const model = this.plugin.settings.getSetting('llm');
     const customInstructions = this.plugin.settings.getSetting('customInstructions');
 
     if (!apiKey) {
-      new Notice('请先在设置中配置 API Key');
+      new Notice('请先在设置中配置 API Key（环境变量名）并确保环境变量已设置');
       return;
     }
 

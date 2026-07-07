@@ -10,15 +10,11 @@
 import CanvasBranchChatPlugin from './main';
 import { PluginSettingTab, Setting } from 'obsidian';
 
-/** 支持的模型列表 */
-const MODELS: Record<string, string> = {
-  'deepseek-chat': 'DeepSeek Chat',
-  'deepseek-coder': 'DeepSeek Coder',
-};
-
 /** Provider 选项 */
 const PROVIDERS: Record<string, string> = {
   'deepseek': 'DeepSeek',
+  'openai': 'OpenAI',
+  'custom': '自定义',
 };
 
 /** 获取第一个 key（替代 Object.keys().first()） */
@@ -42,7 +38,7 @@ export interface PluginSettings {
 export const DEFAULT_SETTINGS: PluginSettings = {
   apiKey: '',
   provider: firstKey(PROVIDERS),
-  llm: firstKey(MODELS),
+  llm: 'deepseek-chat',
   customInstructions: '',
 };
 
@@ -75,31 +71,33 @@ export class SettingsTab extends PluginSettingTab {
           });
       });
 
-    // API Key
+    // API Key（环境变量名）
     new Setting(containerEl)
       .setName('API Key')
-      .setDesc('服务商的 API 密钥')
-      .addText((text) =>
+      .setDesc('填入操作系统环境变量名称（如 DEEPSEEK_API_KEY），插件会从环境变量中安全读取密钥。避免明文泄露。')
+      .addText((text) => {
         text
-          .setPlaceholder('输入你的 API Key')
-          .setValue(this.manager.getSetting('apiKey'))
-          .onChange(async (value) => {
-            await this.manager.setSetting({ apiKey: value });
-          })
-      );
+          .setPlaceholder('DEEPSEEK_API_KEY')
+          .setValue(this.manager.getSetting('apiKey'));
+        text.inputEl.type = 'text';
+        text.inputEl.spellcheck = false;
+        return text.onChange(async (value) => {
+          await this.manager.setSetting({ apiKey: value });
+        });
+      });
 
-    // 模型选择
+    // 模型名称（手动输入）
     new Setting(containerEl)
       .setName('模型')
-      .setDesc('选择大语言模型')
-      .addDropdown((dropdown) => {
-        dropdown
-          .addOptions(MODELS)
+      .setDesc('手动输入模型名称（如 deepseek-chat、gpt-4o-mini 等）。后续版本将支持从远端动态获取模型列表并测试连通性。')
+      .addText((text) =>
+        text
+          .setPlaceholder('deepseek-chat')
           .setValue(this.manager.getSetting('llm'))
           .onChange(async (value) => {
             await this.manager.setSetting({ llm: value });
-          });
-      });
+          })
+      );
 
     // 自定义指令
     new Setting(containerEl)
@@ -142,6 +140,17 @@ export default class SettingsManager {
 
   getSetting<T extends keyof PluginSettings>(key: T): PluginSettings[T] {
     return this.settings[key];
+  }
+
+  /**
+   * 从操作系统环境变量中解析 API Key
+   * settings.apiKey 存储的是环境变量名称（如 DEEPSEEK_API_KEY），
+   * 而非明文密钥。调用此方法获取实际密钥值。
+   */
+  resolveApiKey(): string {
+    const envVarName = this.settings.apiKey?.trim();
+    if (!envVarName) return '';
+    return process.env[envVarName] || '';
   }
 
   async setSetting(data: Partial<PluginSettings>) {
