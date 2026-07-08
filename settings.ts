@@ -8,9 +8,10 @@
  */
 
 import CanvasBranchChatPlugin from './main';
-import { PluginSettingTab, Setting } from 'obsidian';
+import { PluginSettingTab, Setting, Notice } from 'obsidian';
 import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS } from './types';
 import { generateId } from './utils';
+import { LLMClient } from './api';
 
 // ============================================================
 // 默认设置
@@ -422,6 +423,44 @@ class SettingsTab extends PluginSettingTab {
             await this.manager.updateModel(model.id, { maxTokens: num });
           }
         });
+      });
+
+    // 连通性测试
+    new Setting(body)
+      .setName('连通性测试')
+      .setDesc('验证 API Key、Endpoint 和网络连通性，拉取可用模型列表')
+      .addButton((btn) => {
+        btn
+          .setButtonText('🔌 测试连接')
+          .onClick(async () => {
+            btn.setButtonText('测试中...');
+            btn.setDisabled(true);
+
+            const apiKey = this.manager.resolveApiKey(model);
+            if (!apiKey) {
+              new Notice('❌ 无法解析 API Key，请检查环境变量设置');
+              btn.setButtonText('🔌 测试连接');
+              btn.setDisabled(false);
+              return;
+            }
+
+            const client = new LLMClient(model, apiKey);
+            const result = await client.testConnection();
+
+            btn.setButtonText('🔌 测试连接');
+            btn.setDisabled(false);
+
+            if (result.ok) {
+              const modelCount = result.models?.length || 0;
+              new Notice(`✅ 连接成功！发现 ${modelCount} 个可用模型`);
+              // 如果有模型列表，在控制台打印供参考
+              if (result.models && result.models.length > 0) {
+                console.log(`[Canvas Branch Chat] ${model.alias} 可用模型:`, result.models);
+              }
+            } else {
+              new Notice(`❌ 连接失败: ${result.error}`);
+            }
+          });
       });
   }
 }

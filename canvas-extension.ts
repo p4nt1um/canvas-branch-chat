@@ -45,6 +45,11 @@ export default class CanvasBranchExtension {
       new Notice('请先在设置中添加模型配置');
       return null;
     }
+    return this.resolveModelKey(model);
+  }
+
+  /** 解析指定模型的 API Key */
+  private resolveModelKey(model: ModelConfig): { model: ModelConfig; apiKey: string } | null {
     const apiKey = this.plugin.settings.resolveApiKey(model);
     if (!apiKey) {
       new Notice(`无法解析 API Key，请检查环境变量 "${model.apiKeyEnvVar}" 是否已设置`);
@@ -61,12 +66,29 @@ export default class CanvasBranchExtension {
     const canvas = node.canvas;
     if (!canvas) return;
 
-    // P0 #1: 从此处分叉
+    const models = this.plugin.settings.getModels();
+
+    // P0 #1: 从此处分叉（默认模型）
     menu.addItem((item: MenuItem) => {
       item.setTitle('🔀 从此处分叉');
       item.setIcon('git-branch');
       item.onClick(() => this.branchFromNode(node, canvas));
     });
+
+    // P1 #5: 选择模型分叉（子菜单）
+    if (models.length > 1) {
+      menu.addItem((item: MenuItem) => {
+        item.setTitle('🏷️ 指定模型分叉');
+        item.setIcon('users');
+        const submenu = (item as any).setSubmenu?.() ?? item;
+        for (const model of models) {
+          submenu.addItem((sub: MenuItem) => {
+            sub.setTitle(`${model.icon || '🤖'} ${model.alias}`);
+            sub.onClick(() => this.branchFromNode(node, canvas, model));
+          });
+        }
+      });
+    }
 
     // P0: 继续追问
     menu.addItem((item: MenuItem) => {
@@ -89,20 +111,25 @@ export default class CanvasBranchExtension {
 
   private branchFromNode(
     sourceNode: CanvasRuntimeNode,
-    canvas: CanvasRuntimeView
+    canvas: CanvasRuntimeView,
+    selectedModel?: ModelConfig
   ) {
     new BranchModal(this.plugin.app, (result) => {
       if (!result.confirmed) return;
-      this.doBranch(sourceNode, canvas, result.directions);
+      this.doBranch(sourceNode, canvas, result.directions, selectedModel);
     }).open();
   }
 
   private async doBranch(
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView,
-    directions: string[]
+    directions: string[],
+    selectedModel?: ModelConfig
   ) {
-    const mk = this.getModelAndKey();
+    // 模型选择：优先使用传入的模型，否则用默认模型
+    const mk = selectedModel
+      ? this.resolveModelKey(selectedModel)
+      : this.getModelAndKey();
     if (!mk) return;
     const { model, apiKey } = mk;
 
