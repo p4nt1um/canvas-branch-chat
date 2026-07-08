@@ -350,16 +350,76 @@ class SettingsTab extends PluginSettingTab {
         });
       });
 
-    // 模型名称
+    // 连通性测试（放在环境变量和模型名称之间）
     new Setting(body)
-      .setName('模型名称')
-      .addText((text) => {
+      .setName('连通性测试')
+      .setDesc('验证 API Key、Endpoint 和网络连通性，测试成功后可选择模型')
+      .addButton((btn) => {
+        btn
+          .setButtonText('🔌 测试连接')
+          .onClick(async () => {
+            btn.setButtonText('测试中...');
+            btn.setDisabled(true);
+
+            const apiKey = this.manager.resolveApiKey(model);
+            if (!apiKey) {
+              new Notice('❌ 无法解析 API Key，请检查环境变量设置');
+              btn.setButtonText('🔌 测试连接');
+              btn.setDisabled(false);
+              return;
+            }
+
+            const client = new LLMClient(model, apiKey);
+            const result = await client.testConnection();
+
+            btn.setButtonText('🔌 测试连接');
+            btn.setDisabled(false);
+
+            if (result.ok) {
+              const models = result.models || [];
+              new Notice(`✅ 连接成功！发现 ${models.length} 个可用模型`);
+              // 缓存可用模型列表到配置对象
+              await this.manager.updateModel(model.id, { _availableModels: models });
+              this.display();
+            } else {
+              new Notice(`❌ 连接失败: ${result.error}`);
+            }
+          });
+      });
+
+    // 模型名称：测试成功后用下拉框，否则用文本框
+    const modelSetting = new Setting(body)
+      .setName('模型名称');
+
+    if (model._availableModels && model._availableModels.length > 0) {
+      // 下拉框模式
+      modelSetting.addDropdown((dropdown) => {
+        const options: Record<string, string> = {};
+        for (const m of model._availableModels!) {
+          options[m] = m;
+        }
+        // 如果当前模型不在列表里，加一个手动选项
+        if (model.model && !options[model.model]) {
+          options[model.model] = `${model.model} (自定义)`;
+        }
+        dropdown.addOptions(options);
+        dropdown.setValue(model.model);
+        dropdown.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { model: value });
+        });
+      });
+      modelSetting.setDesc(`✅ 已获取 ${model._availableModels.length} 个可用模型（来自测试连接）`);
+    } else {
+      // 文本框模式
+      modelSetting.setDesc('手动输入模型名称，或先点击上方「测试连接」获取可用模型列表');
+      modelSetting.addText((text) => {
         text.setPlaceholder('deepseek-chat');
         text.setValue(model.model);
         text.onChange(async (value) => {
           await this.manager.updateModel(model.id, { model: value });
         });
       });
+    }
 
     // 颜色
     new Setting(body)
@@ -423,44 +483,6 @@ class SettingsTab extends PluginSettingTab {
             await this.manager.updateModel(model.id, { maxTokens: num });
           }
         });
-      });
-
-    // 连通性测试
-    new Setting(body)
-      .setName('连通性测试')
-      .setDesc('验证 API Key、Endpoint 和网络连通性，拉取可用模型列表')
-      .addButton((btn) => {
-        btn
-          .setButtonText('🔌 测试连接')
-          .onClick(async () => {
-            btn.setButtonText('测试中...');
-            btn.setDisabled(true);
-
-            const apiKey = this.manager.resolveApiKey(model);
-            if (!apiKey) {
-              new Notice('❌ 无法解析 API Key，请检查环境变量设置');
-              btn.setButtonText('🔌 测试连接');
-              btn.setDisabled(false);
-              return;
-            }
-
-            const client = new LLMClient(model, apiKey);
-            const result = await client.testConnection();
-
-            btn.setButtonText('🔌 测试连接');
-            btn.setDisabled(false);
-
-            if (result.ok) {
-              const modelCount = result.models?.length || 0;
-              new Notice(`✅ 连接成功！发现 ${modelCount} 个可用模型`);
-              // 如果有模型列表，在控制台打印供参考
-              if (result.models && result.models.length > 0) {
-                console.log(`[Canvas Branch Chat] ${model.alias} 可用模型:`, result.models);
-              }
-            } else {
-              new Notice(`❌ 连接失败: ${result.error}`);
-            }
-          });
       });
   }
 }

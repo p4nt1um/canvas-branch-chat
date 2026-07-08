@@ -189,6 +189,8 @@ export interface ModelConfig {
   temperature?: number;
   /** Max tokens（默认 4096） */
   maxTokens?: number;
+  /** 测试连接后拉取到的可用模型列表（运行时缓存，不持久化） */
+  _availableModels?: string[];
 }
 
 /** 模型预设组 */
