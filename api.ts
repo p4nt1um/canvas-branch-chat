@@ -68,7 +68,20 @@ export class LLMClient {
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
+        // 提取错误详情
+        let errorDetail = `${response.status} ${response.statusText}`;
+        try {
+          const errorBody = await response.text();
+          const errorJson = JSON.parse(errorBody);
+          if (errorJson.error?.message) {
+            errorDetail += `: ${errorJson.error.message}`;
+          } else {
+            errorDetail += `: ${errorBody.slice(0, 200)}`;
+          }
+        } catch {
+          // response 不是 JSON
+        }
+        throw new Error(`API error: ${errorDetail}`);
       }
 
       const reader = response.body?.getReader();
