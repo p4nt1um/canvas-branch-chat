@@ -93,11 +93,22 @@ export function getNodeText(node: CanvasRuntimeNode): string {
 
 /**
  * 从节点读取对话角色
- * 
- * 返回 null 表示未设置（需要 fallback 到奇偶交替推断）
+ *
+ * 优先从 canvas 数据层读取（可靠持久化），
+ * fallback 到节点 getData（运行时可能未同步）
  */
 export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'branch-point' | null {
   try {
+    // 方式1：从 canvas 数据层读取（最可靠）
+    const canvas = node.canvas;
+    if (canvas) {
+      const canvasData = canvas.getData();
+      const nodeData = canvasData.nodes.find((n: any) => n.id === node.id);
+      if (nodeData && nodeData.chatRole) {
+        return nodeData.chatRole;
+      }
+    }
+    // 方式2：从节点 getData 读取
     const data = node.getData() as ChatNodeData;
     return data?.chatRole ?? null;
   } catch {
@@ -107,13 +118,27 @@ export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'br
 
 /**
  * 在节点上写入对话角色元数据
+ *
+ * 同时写入 canvas 数据层（持久化）和节点运行时
  */
 export function setNodeRole(node: CanvasRuntimeNode, role: 'user' | 'assistant' | 'branch-point'): void {
   try {
+    const canvas = node.canvas;
+    if (canvas) {
+      // 直接修改 canvas 数据层（确保持久化）
+      const canvasData = canvas.getData();
+      const nodeData = canvasData.nodes.find((n: any) => n.id === node.id);
+      if (nodeData) {
+        nodeData.chatRole = role;
+        canvas.setData(canvasData);
+        canvas.requestSave();
+      }
+    }
+    // 同时写入节点运行时（确保当前会话立即可读）
     const data = node.getData();
     node.setData({ ...data, chatRole: role } as any);
   } catch {
-    // setData 可能失败，忽略
+    // 忽略
   }
 }
 
@@ -171,18 +196,14 @@ export function buildContextFromChain(
     if (!text) continue;
     if (text === 'Loading...' || text === '思考中...') continue;
 
-    // 优先从元数据读取角色
+    // 从元数据读取角色（纯元数据驱动，无 fallback）
     const metaRole = getNodeRole(node);
-    let role: 'user' | 'assistant';
-
-    if (metaRole === 'user' || metaRole === 'assistant') {
-      role = metaRole;
-    } else {
-      // Fallback: 奇偶交替推断（兼容老节点）
-      role = messages.length % 2 === 0 ? 'user' : 'assistant';
+    if (metaRole !== 'user' && metaRole !== 'assistant') {
+      // 未标记角色的节点跳过（不参与上下文）
+      continue;
     }
 
-    messages.push({ role: role as any, content: text });
+    messages.push({ role: metaRole, content: text });
   }
 
   return messages;
@@ -213,7 +234,7 @@ export function buildBranchContext(
   if (branchDirection) {
     messages.push({
       role: 'system',
-      content: `本次对话请从以下角度展开：${branchDirection}`,
+      content: branchDirection,
     });
   }
 

@@ -6,15 +6,17 @@
  * #2 分支方向标注
  * #3 上下文自动继承（直系祖先链）
  * #4 边标签显示
+ *
+ * P1 #5: 多模型支持（使用默认模型，后续子任务加选模型分叉）
  */
 
 import { Menu, MenuItem, Notice } from 'obsidian';
 import CanvasBranchChatPlugin from './main';
-import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage } from './types';
+import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig } from './types';
 import { createLLMClient } from './api';
 import { getNodeScrollHeight, generateId } from './utils';
 import { BranchModal } from './branch-modal';
-import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole } from './context';
+import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole, findChildNodeIds, findNodeById, getNodeText } from './context';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -33,6 +35,25 @@ export default class CanvasBranchExtension {
   }
 
   // ============================================================
+  // 模型获取工具
+  // ============================================================
+
+  /** 获取默认模型 + API Key，失败返回 null 并提示 */
+  private getModelAndKey(): { model: ModelConfig; apiKey: string } | null {
+    const model = this.plugin.settings.getDefaultModel();
+    if (!model) {
+      new Notice('请先在设置中添加模型配置');
+      return null;
+    }
+    const apiKey = this.plugin.settings.resolveApiKey(model);
+    if (!apiKey) {
+      new Notice(`无法解析 API Key，请检查环境变量 "${model.apiKeyEnvVar}" 是否已设置`);
+      return null;
+    }
+    return { model, apiKey };
+  }
+
+  // ============================================================
   // 右键菜单
   // ============================================================
 
@@ -47,14 +68,14 @@ export default class CanvasBranchExtension {
       item.onClick(() => this.branchFromNode(node, canvas));
     });
 
-    // P0: 继续追问（在当前分支链上追加）
+    // P0: 继续追问
     menu.addItem((item: MenuItem) => {
       item.setTitle('💬 继续追问');
       item.setIcon('message-circle');
       item.onClick(() => this.continueChat(node, canvas));
     });
 
-    // 保留原始：直接提交到 AI（不带上下文）
+    // 直接提交到 AI（不带上下文）
     menu.addItem((item: MenuItem) => {
       item.setTitle('🤖 提交到 AI');
       item.setIcon('bot');
@@ -70,7 +91,6 @@ export default class CanvasBranchExtension {
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView
   ) {
-    // 弹出分支方向输入框
     new BranchModal(this.plugin.app, (result) => {
       if (!result.confirmed) return;
       this.doBranch(sourceNode, canvas, result.directions);
@@ -82,22 +102,19 @@ export default class CanvasBranchExtension {
     canvas: CanvasRuntimeView,
     directions: string[]
   ) {
-    const apiKey = this.plugin.settings.resolveApiKey();
-    const model = this.plugin.settings.getSetting('llm');
-    const customInstructions = this.plugin.settings.getSetting('customInstructions');
+    const mk = this.getModelAndKey();
+    if (!mk) return;
+    const { model, apiKey } = mk;
 
-    if (!apiKey) {
-      new Notice('请先在设置中配置 API Key（环境变量名）并确保环境变量已设置');
-      return;
-    }
+    const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
     // 标记源节点为 user（如果未标记）
     if (!getNodeRole(sourceNode)) {
       setNodeRole(sourceNode, 'user');
     }
 
-    const offsetX = 400; // 右侧偏移
-    const nodeSpacing = 80; // 分支间垂直间距
+    const offsetX = 400;
+    const nodeSpacing = 80;
     const nodeHeight = sourceNode.height || 200;
 
     // 为每个方向创建 AI 回答节点 + 连线
@@ -130,11 +147,11 @@ export default class CanvasBranchExtension {
     // 并行请求所有方向
     await Promise.allSettled(
       branches.map(async ({ answerNode, messages }) => {
-        const client = createLLMClient('deepseek', apiKey);
+        const client = createLLMClient(model, apiKey);
         let fullText = '';
 
         try {
-          await client.streamChat(messages, model, (token: string) => {
+          await client.streamChat(messages, (token: string) => {
             fullText += token;
             answerNode.setText(fullText);
             this.autoFitHeight(answerNode);
@@ -154,7 +171,7 @@ export default class CanvasBranchExtension {
           y: branch.answerNode.y + branch.answerNode.height + 50,
         },
         text: '',
-        focus: branches.indexOf(branch) === 0, // 只聚焦第一个
+        focus: branches.indexOf(branch) === 0,
       });
       setNodeRole(askNode, 'user');
       this.addEdge(canvas, branch.answerNode.id, askNode.id, 'bottom', 'top');
@@ -164,31 +181,54 @@ export default class CanvasBranchExtension {
   }
 
   // ============================================================
-  // P0: 继续追问（在当前分支链上追加对话）
+  // P0: 继续追问
   // ============================================================
 
   private async continueChat(
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView
   ) {
-    const apiKey = this.plugin.settings.resolveApiKey();
-    const model = this.plugin.settings.getSetting('llm');
-    const customInstructions = this.plugin.settings.getSetting('customInstructions');
+    const mk = this.getModelAndKey();
+    if (!mk) return;
+    const { model, apiKey } = mk;
 
-    if (!apiKey) {
-      new Notice('请先在设置中配置 API Key（环境变量名）并确保环境变量已设置');
+    const customInstructions = this.plugin.settings.getSettings().customInstructions;
+
+    // 读取源节点角色（元数据驱动）
+    const role = getNodeRole(sourceNode);
+
+    // 情况1：在 AI 节点上追问 → 检查是否已有空 user 子节点
+    if (role === 'assistant') {
+      const childIds = findChildNodeIds(canvas, sourceNode.id);
+      const hasEmptyChild = childIds.some(id => {
+        const child = findNodeById(canvas, id);
+        if (!child) return false;
+        return getNodeRole(child) === 'user' && !getNodeText(child).trim();
+      });
+
+      if (hasEmptyChild) {
+        new Notice('💬 请在下方输入框输入追问内容，然后右键 → 继续追问');
+      } else {
+        const askNode = canvas.createTextNode({
+          pos: {
+            x: sourceNode.x,
+            y: sourceNode.y + sourceNode.height + 50,
+          },
+          text: '',
+          focus: true,
+        });
+        setNodeRole(askNode, 'user');
+        this.addEdge(canvas, sourceNode.id, askNode.id, 'bottom', 'top');
+        new Notice('💬 输入追问内容后，右键 → 继续追问');
+      }
       return;
     }
 
+    // 情况2：user 节点但文本为空
     const nodeText = sourceNode.text?.trim();
     if (!nodeText) {
       new Notice('请先输入你的问题');
       return;
-    }
-
-    // 标记源节点为 user（如果未标记）
-    if (!getNodeRole(sourceNode)) {
-      setNodeRole(sourceNode, 'user');
     }
 
     // 1. 创建 AI 回答节点
@@ -216,11 +256,11 @@ export default class CanvasBranchExtension {
     messages.push(...historyMessages);
 
     // 3. 流式请求
-    const client = createLLMClient('deepseek', apiKey);
+    const client = createLLMClient(model, apiKey);
     let fullText = '';
 
     try {
-      await client.streamChat(messages, model, (token: string) => {
+      await client.streamChat(messages, (token: string) => {
         fullText += token;
         answerNode.setText(fullText);
         this.autoFitHeight(answerNode);
@@ -244,20 +284,22 @@ export default class CanvasBranchExtension {
   }
 
   // ============================================================
-  // 原始：直接提交到 AI（无上下文）
+  // 直接提交到 AI（无上下文）
   // ============================================================
 
   private async submitToAi(
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView
   ) {
-    const apiKey = this.plugin.settings.resolveApiKey();
-    const model = this.plugin.settings.getSetting('llm');
-    const customInstructions = this.plugin.settings.getSetting('customInstructions');
+    const mk = this.getModelAndKey();
+    if (!mk) return;
+    const { model, apiKey } = mk;
 
-    if (!apiKey) {
-      new Notice('请先在设置中配置 API Key（环境变量名）并确保环境变量已设置');
-      return;
+    const customInstructions = this.plugin.settings.getSettings().customInstructions;
+
+    // 标记源节点为 user（如果未标记）
+    if (!getNodeRole(sourceNode)) {
+      setNodeRole(sourceNode, 'user');
     }
 
     const answerNode = canvas.createTextNode({
@@ -279,11 +321,11 @@ export default class CanvasBranchExtension {
     }
     messages.push({ role: 'user', content: sourceNode.text });
 
-    const client = createLLMClient('deepseek', apiKey);
+    const client = createLLMClient(model, apiKey);
     let fullText = '';
 
     try {
-      await client.streamChat(messages, model, (token: string) => {
+      await client.streamChat(messages, (token: string) => {
         fullText += token;
         answerNode.setText(fullText);
         this.autoFitHeight(answerNode);
@@ -300,7 +342,6 @@ export default class CanvasBranchExtension {
   // 工具方法
   // ============================================================
 
-  /** 在两个节点间创建连线，可带标签 */
   private addEdge(
     canvas: CanvasRuntimeView,
     fromNodeId: string,
@@ -323,7 +364,6 @@ export default class CanvasBranchExtension {
     canvas.setData(canvasData);
   }
 
-  /** 自适应节点高度 */
   private autoFitHeight(node: CanvasRuntimeNode): void {
     const actualHeight = getNodeScrollHeight(node);
     const nodeData = node.getData();

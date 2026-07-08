@@ -5,6 +5,7 @@
  * 1. Obsidian Canvas 内部运行时类型（公开 API 未暴露）
  * 2. 分支对话数据结构
  * 3. LLM API provider 抽象
+ * 4. 多模型配置（P1 #5）
  */
 
 import { CanvasEdgeData, CanvasTextData } from 'obsidian/canvas';
@@ -19,6 +20,8 @@ export interface ChatNodeData extends CanvasTextData {
   chatRole?: 'user' | 'assistant' | 'branch-point';
   /** 所属分支 ID */
   chatBranchId?: string;
+  /** 使用的模型配置 ID（assistant 节点记录用哪个模型生成的） */
+  modelConfigId?: string;
 }
 
 // ============================================================
@@ -157,3 +160,84 @@ export interface ContextNode {
   content: string;
   branchId: string;
 }
+
+// ============================================================
+// P1 #5: 多模型配置体系
+// ============================================================
+
+/** 单个模型配置 */
+export interface ModelConfig {
+  /** 唯一标识 */
+  id: string;
+  /** 显示别名（"分析师"、"魔鬼代言人"） */
+  alias: string;
+  /** Provider 类型 */
+  provider: 'deepseek' | 'openai' | 'custom';
+  /** API endpoint */
+  baseUrl: string;
+  /** API Key 环境变量名 */
+  apiKeyEnvVar: string;
+  /** 模型名称 */
+  model: string;
+  /** Canvas 节点颜色 */
+  color: string;
+  /** 图标 emoji */
+  icon?: string;
+  /** 系统提示词 */
+  systemPrompt: string;
+  /** 温度（0-2，默认 0.7） */
+  temperature?: number;
+  /** Max tokens（默认 4096） */
+  maxTokens?: number;
+}
+
+/** 模型预设组 */
+export interface PresetGroup {
+  /** 预设组名称 */
+  name: string;
+  /** 包含的模型配置列表 */
+  models: ModelConfig[];
+}
+
+/** 插件设置（多模型版本） */
+export interface PluginSettingsV2 {
+  /** 模型配置列表 */
+  models: ModelConfig[];
+  /** 默认模型 ID（指向 models 中的某一项） */
+  defaultModelId: string;
+  /** 全局自定义指令（兼容旧版，可作为默认 system prompt） */
+  customInstructions: string;
+  /** 预设组 */
+  presetGroups?: PresetGroup[];
+}
+
+/** Provider 默认配置 */
+export const PROVIDER_DEFAULTS: Record<string, { baseUrl: string; model: string; models: string[] }> = {
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com/chat/completions',
+    model: 'deepseek-chat',
+    models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+  },
+  openai: {
+    baseUrl: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-4o-mini',
+    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'o1-mini'],
+  },
+  custom: {
+    baseUrl: '',
+    model: '',
+    models: [],
+  },
+};
+
+/** 颜色预设 */
+export const COLOR_PRESETS = [
+  { label: '🔵 蓝', value: '#4A90D9' },
+  { label: '🔴 红', value: '#E74C3C' },
+  { label: '🟢 绿', value: '#27AE60' },
+  { label: '🟡 黄', value: '#F39C12' },
+  { label: '🟣 紫', value: '#9B59B6' },
+  { label: '🟠 橙', value: '#E67E22' },
+  { label: '⚫ 黑', value: '#2C3E50' },
+  { label: '⚫ 灰', value: '#95A5A6' },
+];

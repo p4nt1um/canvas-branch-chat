@@ -1,52 +1,221 @@
 /**
- * settings.ts — 插件设置管理
- * 
- * 基于 fork 的 SettingsManager 重构：
- * 1. 修复 Object.keys().first() 非标准调用
- * 2. 增加 provider 选择
- * 3. 保持事件驱动的设置变更模式
+ * settings.ts — 插件设置管理（P1 #5 多模型版本）
+ *
+ * 变更：
+ * 1. 从单模型改为 ModelConfig[] 列表
+ * 2. 兼容旧版数据自动迁移
+ * 3. 设置页 UI 改为动态模型列表
  */
 
 import CanvasBranchChatPlugin from './main';
 import { PluginSettingTab, Setting } from 'obsidian';
-
-/** Provider 选项 */
-const PROVIDERS: Record<string, string> = {
-  'deepseek': 'DeepSeek',
-  'openai': 'OpenAI',
-  'custom': '自定义',
-};
-
-/** 获取第一个 key（替代 Object.keys().first()） */
-function firstKey<T extends Record<string, any>>(obj: T): string {
-  return Object.keys(obj)[0];
-}
+import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS } from './types';
+import { generateId } from './utils';
 
 // ============================================================
-// 设置接口
+// 默认设置
 // ============================================================
 
-export interface PluginSettings {
-  apiKey: string;
-  provider: string;
-  llm: string;
-  customInstructions: string;
-  /** P1: 自定义 API endpoint */
-  customBaseUrl?: string;
+/** 创建默认模型配置 */
+function createDefaultModel(): ModelConfig {
+  return {
+    id: generateId(8),
+    alias: 'DeepSeek',
+    provider: 'deepseek',
+    baseUrl: PROVIDER_DEFAULTS.deepseek.baseUrl,
+    apiKeyEnvVar: 'DEEPSEEK_API_KEY',
+    model: PROVIDER_DEFAULTS.deepseek.model,
+    color: '#4A90D9',
+    icon: '🤖',
+    systemPrompt: '',
+    temperature: 0.7,
+    maxTokens: 4096,
+  };
 }
 
-export const DEFAULT_SETTINGS: PluginSettings = {
-  apiKey: '',
-  provider: firstKey(PROVIDERS),
-  llm: 'deepseek-chat',
+export const DEFAULT_SETTINGS_V2: PluginSettingsV2 = {
+  models: [createDefaultModel()],
+  defaultModelId: '',
   customInstructions: '',
 };
 
 // ============================================================
-// 设置页 UI
+// 旧版数据迁移
 // ============================================================
 
-export class SettingsTab extends PluginSettingTab {
+/** 旧版设置接口（单模型） */
+interface LegacySettings {
+  apiKey: string;
+  provider: string;
+  llm: string;
+  customInstructions: string;
+  customBaseUrl?: string;
+}
+
+/**
+ * 检测并迁移旧版设置
+ */
+function migrateSettings(data: any): PluginSettingsV2 {
+  // 已经是 V2 格式
+  if (data && Array.isArray(data.models) && data.models.length > 0) {
+    return Object.assign({}, DEFAULT_SETTINGS_V2, data);
+  }
+
+  // 旧版格式（单模型）
+  if (data && data.apiKey !== undefined) {
+    const legacy = data as LegacySettings;
+    const model: ModelConfig = {
+      id: generateId(8),
+      alias: legacy.provider || 'DeepSeek',
+      provider: (legacy.provider as 'deepseek' | 'openai' | 'custom') || 'deepseek',
+      baseUrl: legacy.customBaseUrl || PROVIDER_DEFAULTS[legacy.provider || 'deepseek']?.baseUrl || '',
+      apiKeyEnvVar: legacy.apiKey || 'DEEPSEEK_API_KEY',
+      model: legacy.llm || 'deepseek-chat',
+      color: '#4A90D9',
+      icon: '🤖',
+      systemPrompt: legacy.customInstructions || '',
+      temperature: 0.7,
+      maxTokens: 4096,
+    };
+    return {
+      models: [model],
+      defaultModelId: model.id,
+      customInstructions: legacy.customInstructions || '',
+    };
+  }
+
+  // 全新安装
+  const settings = Object.assign({}, DEFAULT_SETTINGS_V2);
+  settings.defaultModelId = settings.models[0].id;
+  return settings;
+}
+
+// ============================================================
+// 设置管理器
+// ============================================================
+
+export default class SettingsManager {
+  static SETTINGS_CHANGED_EVENT = 'canvas-branch-chat:settings-changed';
+
+  private plugin: CanvasBranchChatPlugin;
+  private settings: PluginSettingsV2;
+  private settingsTab: SettingsTab;
+
+  constructor(plugin: CanvasBranchChatPlugin) {
+    this.plugin = plugin;
+  }
+
+  async loadSettings() {
+    const raw = await this.plugin.loadData();
+    this.settings = migrateSettings(raw);
+    // 确保有 defaultModelId
+    if (!this.settings.defaultModelId && this.settings.models.length > 0) {
+      this.settings.defaultModelId = this.settings.models[0].id;
+      await this.saveSettings();
+    }
+  }
+
+  async saveSettings() {
+    await this.plugin.saveData(this.settings);
+    this.plugin.app.workspace.trigger(SettingsManager.SETTINGS_CHANGED_EVENT);
+  }
+
+  /** 获取默认模型配置 */
+  getDefaultModel(): ModelConfig | null {
+    return this.settings.models.find(m => m.id === this.settings.defaultModelId) || this.settings.models[0] || null;
+  }
+
+  /** 按 ID 获取模型配置 */
+  getModel(id: string): ModelConfig | null {
+    return this.settings.models.find(m => m.id === id) || null;
+  }
+
+  /** 获取所有模型 */
+  getModels(): ModelConfig[] {
+    return this.settings.models;
+  }
+
+  /** 从模型配置解析 API Key */
+  resolveApiKey(model: ModelConfig): string {
+    const envVarName = model.apiKeyEnvVar?.trim();
+    if (!envVarName) return '';
+    return process.env[envVarName] || '';
+  }
+
+  /** 兼容旧接口：获取默认模型的 API Key */
+  resolveApiKeyLegacy(): string {
+    const model = this.getDefaultModel();
+    return model ? this.resolveApiKey(model) : '';
+  }
+
+  getSettings(): PluginSettingsV2 {
+    return this.settings;
+  }
+
+  async setSettings(data: Partial<PluginSettingsV2>) {
+    Object.assign(this.settings, data);
+    await this.saveSettings();
+  }
+
+  /** 添加模型 */
+  async addModel(model?: Partial<ModelConfig>): Promise<ModelConfig> {
+    const newModel: ModelConfig = Object.assign({
+      id: generateId(8),
+      alias: '新模型',
+      provider: 'deepseek',
+      baseUrl: PROVIDER_DEFAULTS.deepseek.baseUrl,
+      apiKeyEnvVar: '',
+      model: PROVIDER_DEFAULTS.deepseek.model,
+      color: COLOR_PRESETS[this.settings.models.length % COLOR_PRESETS.length].value,
+      icon: '🤖',
+      systemPrompt: '',
+      temperature: 0.7,
+      maxTokens: 4096,
+    }, model || {});
+    this.settings.models.push(newModel);
+    await this.saveSettings();
+    return newModel;
+  }
+
+  /** 更新模型 */
+  async updateModel(id: string, patch: Partial<ModelConfig>) {
+    const model = this.settings.models.find(m => m.id === id);
+    if (model) {
+      Object.assign(model, patch);
+      await this.saveSettings();
+    }
+  }
+
+  /** 删除模型 */
+  async removeModel(id: string) {
+    const idx = this.settings.models.findIndex(m => m.id === id);
+    if (idx >= 0) {
+      this.settings.models.splice(idx, 1);
+      // 如果删的是默认模型，重置默认
+      if (this.settings.defaultModelId === id) {
+        this.settings.defaultModelId = this.settings.models[0]?.id || '';
+      }
+      await this.saveSettings();
+    }
+  }
+
+  /** 设置默认模型 */
+  async setDefaultModel(id: string) {
+    this.settings.defaultModelId = id;
+    await this.saveSettings();
+  }
+
+  addSettingsTab() {
+    this.settingsTab = new SettingsTab(this.plugin, this);
+    this.plugin.addSettingTab(this.settingsTab);
+  }
+}
+
+// ============================================================
+// 设置页 UI（多模型列表）
+// ============================================================
+
+class SettingsTab extends PluginSettingTab {
   private manager: SettingsManager;
 
   constructor(plugin: CanvasBranchChatPlugin, manager: SettingsManager) {
@@ -58,108 +227,201 @@ export class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // Provider 选择
+    containerEl.createEl('h2', { text: '模型配置' });
+
+    // 渲染模型列表
+    const models = this.manager.getModels();
+    models.forEach((model) => this.renderModelCard(model));
+
+    // 添加模型按钮
     new Setting(containerEl)
-      .setName('AI 服务商')
-      .setDesc('选择大模型服务商')
-      .addDropdown((dropdown) => {
-        dropdown
-          .addOptions(PROVIDERS)
-          .setValue(this.manager.getSetting('provider'))
-          .onChange(async (value) => {
-            await this.manager.setSetting({ provider: value });
+      .addButton((btn) => {
+        btn
+          .setButtonText('+ 添加模型')
+          .onClick(async () => {
+            await this.manager.addModel();
+            this.display();
           });
       });
 
-    // API Key（环境变量名）
+    // 全局自定义指令
+    containerEl.createEl('h2', { text: '全局设置' });
     new Setting(containerEl)
-      .setName('API Key')
-      .setDesc('填入操作系统环境变量名称（如 DEEPSEEK_API_KEY），插件会从环境变量中安全读取密钥。避免明文泄露。')
-      .addText((text) => {
+      .setName('全局自定义指令')
+      .setDesc('作为默认系统提示词（单个模型可覆盖此设置）')
+      .addTextArea((text) => {
         text
-          .setPlaceholder('DEEPSEEK_API_KEY')
-          .setValue(this.manager.getSetting('apiKey'));
-        text.inputEl.type = 'text';
-        text.inputEl.spellcheck = false;
+          .setPlaceholder('例如：你是一个专业的产品经理...')
+          .setValue(this.manager.getSettings().customInstructions);
+        text.inputEl.rows = 3;
+        text.inputEl.style.width = '100%';
         return text.onChange(async (value) => {
-          await this.manager.setSetting({ apiKey: value });
+          await this.manager.setSettings({ customInstructions: value });
+        });
+      });
+  }
+
+  /** 渲染单个模型配置卡片 */
+  private renderModelCard(model: ModelConfig) {
+    const { containerEl } = this;
+    const isDefault = model.id === this.manager.getSettings().defaultModelId;
+
+    // 卡片容器
+    const card = containerEl.createDiv({ cls: 'model-config-card' });
+
+    // 卡片头部：别名 + 默认标记 + 删除按钮
+    const header = card.createDiv({ cls: 'model-config-header' });
+
+    const titleEl = header.createDiv({ cls: 'model-config-title' });
+    titleEl.createSpan({ text: `${model.icon || '🤖'} ${model.alias}` });
+    if (isDefault) {
+      titleEl.createSpan({ text: ' ⭐默认', cls: 'model-default-badge' });
+    }
+
+    const headerBtns = header.createDiv({ cls: 'model-config-actions' });
+    if (!isDefault) {
+      const setDefaultBtn = headerBtns.createEl('button', { text: '设为默认' });
+      setDefaultBtn.addEventListener('click', async () => {
+        await this.manager.setDefaultModel(model.id);
+        this.display();
+      });
+    }
+    const deleteBtn = headerBtns.createEl('button', { text: '🗑', cls: 'mod-warning' });
+    deleteBtn.addEventListener('click', async () => {
+      if (this.manager.getModels().length <= 1) return; // 至少保留1个
+      await this.manager.removeModel(model.id);
+      this.display();
+    });
+
+    // 卡片内容：各字段
+    const body = card.createDiv({ cls: 'model-config-body' });
+
+    // 别名
+    new Setting(body)
+      .setName('别名')
+      .setDesc('显示名（如"分析师"、"魔鬼代言人"）')
+      .addText((text) => {
+        text.setValue(model.alias);
+        text.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { alias: value });
         });
       });
 
-    // 模型名称（手动输入）
-    new Setting(containerEl)
-      .setName('模型')
-      .setDesc('手动输入模型名称（如 deepseek-chat、gpt-4o-mini 等）。后续版本将支持从远端动态获取模型列表并测试连通性。')
-      .addText((text) =>
-        text
-          .setPlaceholder('deepseek-chat')
-          .setValue(this.manager.getSetting('llm'))
+    // Provider
+    new Setting(body)
+      .setName('服务商')
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOptions({ deepseek: 'DeepSeek', openai: 'OpenAI', custom: '自定义' })
+          .setValue(model.provider)
           .onChange(async (value) => {
-            await this.manager.setSetting({ llm: value });
-          })
-      );
+            const provider = value as 'deepseek' | 'openai' | 'custom';
+            const defaults = PROVIDER_DEFAULTS[provider];
+            await this.manager.updateModel(model.id, {
+              provider,
+              baseUrl: defaults.baseUrl || model.baseUrl,
+              model: defaults.model || model.model,
+            });
+            this.display();
+          });
+      });
 
-    // 自定义指令
-    new Setting(containerEl)
-      .setName('自定义指令')
-      .setDesc('给 AI 的系统提示词')
-      .addTextArea((text) =>
-        text
-          .setPlaceholder('例如：你是一个专业的产品经理...')
-          .setValue(this.manager.getSetting('customInstructions'))
-          .onChange(async (value) => {
-            await this.manager.setSetting({ customInstructions: value });
-          })
-      );
-  }
-}
+    // Base URL
+    new Setting(body)
+      .setName('API Endpoint')
+      .addText((text) => {
+        text.setValue(model.baseUrl);
+        text.inputEl.style.width = '100%';
+        text.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { baseUrl: value });
+        });
+      });
 
-// ============================================================
-// 设置管理器
-// ============================================================
+    // API Key 环境变量
+    new Setting(body)
+      .setName('API Key 环境变量')
+      .setDesc('操作系统环境变量名（如 DEEPSEEK_API_KEY）')
+      .addText((text) => {
+        text.setPlaceholder('DEEPSEEK_API_KEY');
+        text.setValue(model.apiKeyEnvVar);
+        text.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { apiKeyEnvVar: value });
+        });
+      });
 
-export default class SettingsManager {
-  static SETTINGS_CHANGED_EVENT = 'canvas-branch-chat:settings-changed';
+    // 模型名称
+    new Setting(body)
+      .setName('模型名称')
+      .addText((text) => {
+        text.setPlaceholder('deepseek-chat');
+        text.setValue(model.model);
+        text.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { model: value });
+        });
+      });
 
-  private plugin: CanvasBranchChatPlugin;
-  private settings: PluginSettings;
-  private settingsTab: SettingsTab;
+    // 颜色
+    new Setting(body)
+      .setName('节点颜色')
+      .addDropdown((dropdown) => {
+        const options: Record<string, string> = {};
+        COLOR_PRESETS.forEach(c => { options[c.value] = c.label; });
+        dropdown.addOptions(options).setValue(model.color);
+        dropdown.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { color: value });
+        });
+      });
 
-  constructor(plugin: CanvasBranchChatPlugin) {
-    this.plugin = plugin;
-  }
+    // 图标
+    new Setting(body)
+      .setName('图标')
+      .setDesc('emoji（如 🤖 🔬 🔴）')
+      .addText((text) => {
+        text.setValue(model.icon || '');
+        text.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { icon: value });
+        });
+      });
 
-  async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.plugin.loadData());
-  }
+    // 系统提示词
+    new Setting(body)
+      .setName('系统提示词')
+      .setDesc('该模型的独立人设')
+      .addTextArea((text) => {
+        text.setPlaceholder('你是一个严谨的分析师...');
+        text.setValue(model.systemPrompt);
+        text.inputEl.rows = 3;
+        text.inputEl.style.width = '100%';
+        text.onChange(async (value) => {
+          await this.manager.updateModel(model.id, { systemPrompt: value });
+        });
+      });
 
-  async saveSettings() {
-    await this.plugin.saveData(this.settings);
-    this.plugin.app.workspace.trigger(SettingsManager.SETTINGS_CHANGED_EVENT);
-  }
+    // Temperature
+    new Setting(body)
+      .setName('Temperature')
+      .setDesc('0 = 严谨，2 = 发散（默认 0.7）')
+      .addText((text) => {
+        text.setValue(String(model.temperature ?? 0.7));
+        text.onChange(async (value) => {
+          const num = parseFloat(value);
+          if (!isNaN(num) && num >= 0 && num <= 2) {
+            await this.manager.updateModel(model.id, { temperature: num });
+          }
+        });
+      });
 
-  getSetting<T extends keyof PluginSettings>(key: T): PluginSettings[T] {
-    return this.settings[key];
-  }
-
-  /**
-   * 从操作系统环境变量中解析 API Key
-   * settings.apiKey 存储的是环境变量名称（如 DEEPSEEK_API_KEY），
-   * 而非明文密钥。调用此方法获取实际密钥值。
-   */
-  resolveApiKey(): string {
-    const envVarName = this.settings.apiKey?.trim();
-    if (!envVarName) return '';
-    return process.env[envVarName] || '';
-  }
-
-  async setSetting(data: Partial<PluginSettings>) {
-    Object.assign(this.settings, data);
-    await this.saveSettings();
-  }
-
-  addSettingsTab() {
-    this.settingsTab = new SettingsTab(this.plugin, this);
-    this.plugin.addSettingTab(this.settingsTab);
+    // Max Tokens
+    new Setting(body)
+      .setName('Max Tokens')
+      .addText((text) => {
+        text.setValue(String(model.maxTokens ?? 4096));
+        text.onChange(async (value) => {
+          const num = parseInt(value);
+          if (!isNaN(num) && num > 0) {
+            await this.manager.updateModel(model.id, { maxTokens: num });
+          }
+        });
+      });
   }
 }

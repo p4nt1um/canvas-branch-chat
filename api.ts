@@ -1,85 +1,54 @@
 /**
  * api.ts — LLM Provider 抽象层
  *
- * 负责：
- * 1. 封装不同 LLM provider 的 API 调用
- * 2. SSE streaming 解析
- * 3. 错误处理与重试
- *
- * MVP 只接 DeepSeek（OpenAI 兼容协议），Provider 抽象预留扩展点。
+ * P1 #5: 支持多模型配置
+ * 接收 ModelConfig 对象，从中读取 endpoint/key/model 等参数
  */
 
-import { ChatRequest, ProviderConfig, StreamCallback } from './types';
-
-// ============================================================
-// Provider 注册表
-// ============================================================
-
-/** 默认 Provider 配置 */
-const DEFAULT_PROVIDERS: Record<string, ProviderConfig> = {
-  deepseek: {
-    name: 'deepseek',
-    baseUrl: 'https://api.deepseek.com/chat/completions',
-    apiKey: '',
-    defaultModel: 'deepseek-chat',
-    models: ['deepseek-chat', 'deepseek-coder'],
-  },
-  openai: {
-    name: 'openai',
-    baseUrl: 'https://api.openai.com/v1/chat/completions',
-    apiKey: '',
-    defaultModel: 'gpt-4o-mini',
-    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo'],
-  },
-  custom: {
-    name: 'custom',
-    baseUrl: '',
-    apiKey: '',
-    defaultModel: '',
-    models: [],
-  },
-};
+import { ChatRequest, StreamCallback, ModelConfig } from './types';
 
 // ============================================================
 // LLM Client
 // ============================================================
 
 export class LLMClient {
-  private provider: ProviderConfig;
+  private model: ModelConfig;
+  private apiKey: string;
   private abortController: AbortController | null = null;
 
-  constructor(providerName: string, apiKey: string, customBaseUrl?: string) {
-    const base = { ...DEFAULT_PROVIDERS[providerName] };
-    if (!base) {
-      throw new Error(`Unknown provider: ${providerName}`);
-    }
-
-    this.provider = {
-      ...base,
-      apiKey,
-      baseUrl: customBaseUrl || base.baseUrl,
-    };
+  /**
+   * @param model 模型配置
+   * @param apiKey 已解析的 API Key（从环境变量读取后的实际值）
+   */
+  constructor(model: ModelConfig, apiKey: string) {
+    this.model = model;
+    this.apiKey = apiKey;
   }
 
   /** 发送流式请求 */
   async streamChat(
     messages: ChatRequest['messages'],
-    model?: string,
     onToken?: StreamCallback,
     signal?: AbortSignal
   ): Promise<string> {
+    // 构建系统提示词
+    const finalMessages = [...messages];
+    const systemPrompt = this.model.systemPrompt;
+    if (systemPrompt && !finalMessages.some(m => m.role === 'system')) {
+      finalMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
     const request: ChatRequest = {
-      messages,
-      model: model || this.provider.defaultModel,
+      messages: finalMessages,
+      model: this.model.model,
       stream: true,
-      temperature: 1,
-      max_tokens: 4096,
+      temperature: this.model.temperature ?? 0.7,
+      max_tokens: this.model.maxTokens ?? 4096,
     };
 
     const controller = new AbortController();
     this.abortController = controller;
 
-    // 合并外部 signal
     if (signal) {
       signal.addEventListener('abort', () => controller.abort());
     }
@@ -87,11 +56,11 @@ export class LLMClient {
     let fullText = '';
 
     try {
-      const response = await fetch(this.provider.baseUrl, {
+      const response = await fetch(this.model.baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json;charset=utf-8',
-          'Authorization': `Bearer ${this.provider.apiKey}`,
+          'Authorization': `Bearer ${this.apiKey}`,
           'Accept': 'text/event-stream',
         },
         body: JSON.stringify(request),
@@ -139,7 +108,7 @@ export class LLMClient {
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        return fullText; // 正常中断，返回已有文本
+        return fullText;
       }
       throw error;
     } finally {
@@ -154,17 +123,43 @@ export class LLMClient {
     this.abortController?.abort();
   }
 
-  /** 获取当前 provider 信息 */
-  getProvider(): ProviderConfig {
-    return this.provider;
+  /** 获取当前模型配置 */
+  getModel(): ModelConfig {
+    return this.model;
+  }
+
+  /**
+   * 连通性测试：GET /v1/models（或 /models）
+   * 验证 API Key + endpoint + 网络连通性
+   */
+  async testConnection(): Promise<{ ok: boolean; models?: string[]; error?: string }> {
+    try {
+      // 将 chat/completions 替换为 models
+      const modelsUrl = this.model.baseUrl
+        .replace('/chat/completions', '/models')
+        .replace('/v1/chat/completions', '/v1/models');
+
+      const response = await fetch(modelsUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}` };
+      }
+
+      const data = await response.json();
+      const models = data?.data?.map((m: any) => m.id) || [];
+      return { ok: true, models };
+    } catch (error: any) {
+      return { ok: false, error: error.message || '连接失败' };
+    }
   }
 }
 
-/** 快捷工厂：从配置创建 LLMClient */
-export function createLLMClient(
-  provider: string,
-  apiKey: string,
-  customBaseUrl?: string
-): LLMClient {
-  return new LLMClient(provider, apiKey, customBaseUrl);
+/** 快捷工厂：从 ModelConfig 创建 LLMClient */
+export function createLLMClient(model: ModelConfig, apiKey: string): LLMClient {
+  return new LLMClient(model, apiKey);
 }

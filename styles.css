@@ -1,8 +1,73 @@
 /*
+ * Canvas Branch Chat — 设置页样式
+ */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* 模型配置卡片 */
+.model-config-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
 
-If your plugin does not need CSS, delete this file.
+/* 卡片头部 */
+.model-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
 
-*/
+.model-config-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.model-config-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.model-config-actions button {
+  font-size: 12px;
+  padding: 2px 10px;
+}
+
+/* 默认标记 */
+.model-default-badge {
+  color: var(--text-accent);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+/* 卡片内容区 */
+.model-config-body {
+  padding: 8px 0;
+}
+
+.model-config-body .setting-item {
+  border-bottom: none;
+  padding: 8px 16px;
+}
+
+.model-config-body .setting-item-name {
+  font-size: 13px;
+}
+
+.model-config-body textarea {
+  font-family: var(--font-monospace);
+}
+
+/* Branch Modal 提示文字 */
+.branch-modal-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* 分叉方向输入框 */
+.branch-directions-container {
+  margin-bottom: 8px;
+}
