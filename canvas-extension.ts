@@ -143,11 +143,10 @@ export default class CanvasBranchExtension {
 
     const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
-    // 标记源节点为 user（如果未标记）+ P1 #6: 设置 user 颜色
+    // 标记源节点为 user（如果未标记）— 不修改源节点颜色
     if (!getNodeRole(sourceNode)) {
       setNodeRole(sourceNode, 'user');
     }
-    setNodeColor(sourceNode, model.color || '#4A90D9');
 
     const offsetX = 400;
     const nodeSpacing = 80;
@@ -220,9 +219,7 @@ export default class CanvasBranchExtension {
         focus: branches.indexOf(branch) === 0,
       });
       setNodeRole(askNode, 'user');
-      // P1 #6: user 节点用固定颜色（与 assistant 区分）
-      setNodeColor(askNode, '#95A5A6'); // 灰色 = 用户输入
-      // P1 #8: 继承分支颜色
+      // P1 #8: 继承分支颜色（仅元数据，不改节点颜色）
       setNodeMetadata(askNode, { chatBranchColor: branch.bColor });
       this.addEdge(canvas, branch.answerNode.id, askNode.id, 'bottom', 'top', undefined, branch.bColor);
     }
@@ -268,8 +265,7 @@ export default class CanvasBranchExtension {
           focus: true,
         });
         setNodeRole(askNode, 'user');
-        setNodeColor(askNode, '#95A5A6'); // P1 #6: user 灰色
-        // P1 #8: 继承父节点的分支颜色
+        // P1 #8: 继承父节点的分支颜色（仅元数据）
         const parentBranchColor = (sourceNode.getData() as any)?.chatBranchColor;
         if (parentBranchColor) {
           setNodeMetadata(askNode, { chatBranchColor: parentBranchColor });
@@ -345,7 +341,6 @@ export default class CanvasBranchExtension {
       focus: true,
     });
     setNodeRole(askNode, 'user');
-    setNodeColor(askNode, '#95A5A6'); // P1 #6
     if (branchColor) {
       setNodeMetadata(askNode, { chatBranchColor: branchColor });
     }
@@ -366,11 +361,10 @@ export default class CanvasBranchExtension {
 
     const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
-    // 标记源节点为 user（如果未标记）+ P1 #6 颜色
+    // 标记源节点为 user（如果未标记）— 不修改源节点颜色
     if (!getNodeRole(sourceNode)) {
       setNodeRole(sourceNode, 'user');
     }
-    setNodeColor(sourceNode, '#95A5A6'); // P1 #6: user 灰色
 
     const answerNode = canvas.createTextNode({
       pos: {
