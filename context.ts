@@ -218,7 +218,14 @@ export function buildContextFromChain(
       continue;
     }
 
-    messages.push({ role: metaRole, content: text });
+    // 清理 assistant 节点中可能存在的模型标注前缀
+    // 前缀格式: "> 🤖 **模型别名**\n\n"
+    let cleanText = text;
+    if (metaRole === 'assistant') {
+      cleanText = cleanText.replace(/^>\s*[^\n]*\*\*[^\n]*\*\*\s*\n\n/, '').trim();
+    }
+
+    messages.push({ role: metaRole, content: cleanText });
   }
 
   return messages;
@@ -245,18 +252,19 @@ export function buildBranchContext(
     messages.push({ role: 'system', content: systemPrompt });
   }
 
-  // 2. 追加分支方向引导
-  if (branchDirection) {
-    messages.push({
-      role: 'system',
-      content: branchDirection,
-    });
-  }
-
-  // 3. 祖先链对话历史
+  // 2. 祖先链对话历史
   const chain = getAncestorChain(canvas, sourceNodeId);
   const historyMessages = buildContextFromChain(canvas, chain);
   messages.push(...historyMessages);
+
+  // 3. 分支方向作为最后的 user 消息（而不是 system）
+  //    这样 AI 明确知道这是用户的新提问，不会被忽略
+  if (branchDirection) {
+    messages.push({
+      role: 'user',
+      content: branchDirection,
+    });
+  }
 
   return messages;
 }

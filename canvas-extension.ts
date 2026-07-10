@@ -400,19 +400,16 @@ export default class CanvasBranchExtension {
   // ============================================================
 
   /**
-   * AI 回答完成后，将模型信息 + 摘要写入节点元数据
+   * P1 #10: AI 回答完成后，将模型信息 + 摘要写入节点元数据
    *
-   * Canvas 文本节点的 text 即为可见内容，无需额外命名。
-   * 但我们在元数据中记录摘要，用于导出和未来可能的节点标题显示。
-   *
-   * 同时在回答前面添加一行小字标注模型来源。
+   * 只写元数据（chatSummary、modelAlias），不修改节点可见文本。
+   * 避免在文本中加前缀导致上下文构建时混入噪音。
    */
   private setNodeSummary(node: CanvasRuntimeNode, fullText: string, model: ModelConfig): void {
     const summary = truncateText(fullText.replace(/[#*>`\n]/g, ' ').trim(), 50);
-    setNodeMetadata(node, { chatSummary: summary });
-
-    // 在回答正文前添加模型标注（不破坏原文）
-    const prefix = `> ${model.icon || '🤖'} **${model.alias}**\n\n`;
-    node.setText(prefix + fullText);
+    setNodeMetadata(node, {
+      chatSummary: summary,
+      modelAlias: model.alias,
+    });
   }
 }
