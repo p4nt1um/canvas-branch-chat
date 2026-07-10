@@ -122,21 +122,36 @@ export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'br
  * 同时写入 canvas 数据层（持久化）和节点运行时
  */
 export function setNodeRole(node: CanvasRuntimeNode, role: 'user' | 'assistant' | 'branch-point'): void {
+  setNodeMetadata(node, { chatRole: role });
+}
+
+/**
+ * P1 #6: 设置节点颜色（角色视觉区分）
+ */
+export function setNodeColor(node: CanvasRuntimeNode, color: string): void {
+  setNodeMetadata(node, { color });
+}
+
+/**
+ * P1 #8/#10: 批量写入节点元数据
+ *
+ * 同时写入 canvas 数据层（持久化）和节点运行时
+ */
+export function setNodeMetadata(node: CanvasRuntimeNode, metadata: Record<string, any>): void {
   try {
     const canvas = node.canvas;
     if (canvas) {
-      // 直接修改 canvas 数据层（确保持久化）
       const canvasData = canvas.getData();
       const nodeData = canvasData.nodes.find((n: any) => n.id === node.id);
       if (nodeData) {
-        nodeData.chatRole = role;
+        Object.assign(nodeData, metadata);
         canvas.setData(canvasData);
         canvas.requestSave();
       }
     }
-    // 同时写入节点运行时（确保当前会话立即可读）
+    // 同时写入节点运行时
     const data = node.getData();
-    node.setData({ ...data, chatRole: role } as any);
+    node.setData({ ...data, ...metadata } as any);
   } catch {
     // 忽略
   }

@@ -12,11 +12,12 @@
 
 import { Menu, MenuItem, Notice } from 'obsidian';
 import CanvasBranchChatPlugin from './main';
-import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig } from './types';
+import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig, BRANCH_COLOR_PALETTE } from './types';
 import { createLLMClient } from './api';
-import { getNodeScrollHeight, generateId } from './utils';
+import { getNodeScrollHeight, generateId, truncateText } from './utils';
 import { BranchModal } from './branch-modal';
-import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole, findChildNodeIds, findNodeById, getNodeText } from './context';
+import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findChildNodeIds, findNodeById, getNodeText } from './context';
+import { exportCanvasConversation } from './export';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -103,6 +104,13 @@ export default class CanvasBranchExtension {
       item.setIcon('bot');
       item.onClick(() => this.submitToAi(node, canvas));
     });
+
+    // P1 #9: 导出对话树
+    menu.addItem((item: MenuItem) => {
+      item.setTitle('📥 导出对话树');
+      item.setIcon('download');
+      item.onClick(() => exportCanvasConversation(this.plugin.app, canvas, node.id));
+    });
   }
 
   // ============================================================
@@ -135,18 +143,23 @@ export default class CanvasBranchExtension {
 
     const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
-    // 标记源节点为 user（如果未标记）
+    // 标记源节点为 user（如果未标记）+ P1 #6: 设置 user 颜色
     if (!getNodeRole(sourceNode)) {
       setNodeRole(sourceNode, 'user');
     }
+    setNodeColor(sourceNode, model.color || '#4A90D9');
 
     const offsetX = 400;
     const nodeSpacing = 80;
     const nodeHeight = sourceNode.height || 200;
 
+    // P1 #8: 为每个方向分配分支颜色
+    const branchColor = (index: number) => BRANCH_COLOR_PALETTE[index % BRANCH_COLOR_PALETTE.length];
+
     // 为每个方向创建 AI 回答节点 + 连线
     const branches = directions.map((direction, i) => {
       const yOffset = i * (nodeHeight + nodeSpacing);
+      const bColor = branchColor(i);
 
       const answerNode = canvas.createTextNode({
         pos: {
@@ -158,17 +171,21 @@ export default class CanvasBranchExtension {
         focus: false,
       });
       setNodeRole(answerNode, 'assistant');
+      // P1 #6: assistant 节点用模型颜色
+      setNodeColor(answerNode, model.color || '#4A90D9');
+      // P1 #8: 记录分支颜色
+      setNodeMetadata(answerNode, { chatBranchColor: bColor, modelConfigId: model.id });
 
-      this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', direction);
+      this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', direction, bColor);
 
       const messages = buildBranchContext(
         canvas,
         sourceNode.id,
         direction,
-        customInstructions
+        model.systemPrompt || customInstructions
       );
 
-      return { answerNode, messages, direction };
+      return { answerNode, messages, direction, bColor };
     });
 
     // 并行请求所有方向
@@ -183,6 +200,8 @@ export default class CanvasBranchExtension {
             answerNode.setText(fullText);
             this.autoFitHeight(answerNode);
           });
+          // P1 #10: AI 回答完成后设置摘要
+          this.setNodeSummary(answerNode, fullText, model);
         } catch (error) {
           console.error('Branch Chat: API error', error);
           answerNode.setText(`❌ 请求失败: ${error}`);
@@ -201,7 +220,11 @@ export default class CanvasBranchExtension {
         focus: branches.indexOf(branch) === 0,
       });
       setNodeRole(askNode, 'user');
-      this.addEdge(canvas, branch.answerNode.id, askNode.id, 'bottom', 'top');
+      // P1 #6: user 节点用固定颜色（与 assistant 区分）
+      setNodeColor(askNode, '#95A5A6'); // 灰色 = 用户输入
+      // P1 #8: 继承分支颜色
+      setNodeMetadata(askNode, { chatBranchColor: branch.bColor });
+      this.addEdge(canvas, branch.answerNode.id, askNode.id, 'bottom', 'top', undefined, branch.bColor);
     }
 
     canvas.requestSave();
@@ -245,6 +268,12 @@ export default class CanvasBranchExtension {
           focus: true,
         });
         setNodeRole(askNode, 'user');
+        setNodeColor(askNode, '#95A5A6'); // P1 #6: user 灰色
+        // P1 #8: 继承父节点的分支颜色
+        const parentBranchColor = (sourceNode.getData() as any)?.chatBranchColor;
+        if (parentBranchColor) {
+          setNodeMetadata(askNode, { chatBranchColor: parentBranchColor });
+        }
         this.addEdge(canvas, sourceNode.id, askNode.id, 'bottom', 'top');
         new Notice('💬 输入追问内容后，右键 → 继续追问');
       }
@@ -269,16 +298,23 @@ export default class CanvasBranchExtension {
       focus: false,
     });
     setNodeRole(answerNode, 'assistant');
+    setNodeColor(answerNode, model.color || '#4A90D9'); // P1 #6: assistant 用模型颜色
+    // P1 #8: 继承分支颜色
+    const branchColor = (sourceNode.getData() as any)?.chatBranchColor;
+    if (branchColor) {
+      setNodeMetadata(answerNode, { chatBranchColor: branchColor });
+    }
 
-    this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top');
+    this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top', undefined, branchColor);
 
     // 2. 构建上下文（直系祖先链）
     const chain = getAncestorChain(canvas, sourceNode.id);
     const historyMessages = buildContextFromChain(canvas, chain);
 
     const messages: ChatMessage[] = [];
-    if (customInstructions) {
-      messages.push({ role: 'system', content: customInstructions });
+    const sysPrompt = model.systemPrompt || customInstructions;
+    if (sysPrompt) {
+      messages.push({ role: 'system', content: sysPrompt });
     }
     messages.push(...historyMessages);
 
@@ -292,6 +328,8 @@ export default class CanvasBranchExtension {
         answerNode.setText(fullText);
         this.autoFitHeight(answerNode);
       });
+      // P1 #10: AI 回答完成后设置摘要
+      this.setNodeSummary(answerNode, fullText, model);
     } catch (error) {
       console.error('Branch Chat: API error', error);
       answerNode.setText(`❌ 请求失败: ${error}`);
@@ -307,7 +345,11 @@ export default class CanvasBranchExtension {
       focus: true,
     });
     setNodeRole(askNode, 'user');
-    this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top');
+    setNodeColor(askNode, '#95A5A6'); // P1 #6
+    if (branchColor) {
+      setNodeMetadata(askNode, { chatBranchColor: branchColor });
+    }
+    this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top', undefined, branchColor);
   }
 
   // ============================================================
@@ -324,10 +366,11 @@ export default class CanvasBranchExtension {
 
     const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
-    // 标记源节点为 user（如果未标记）
+    // 标记源节点为 user（如果未标记）+ P1 #6 颜色
     if (!getNodeRole(sourceNode)) {
       setNodeRole(sourceNode, 'user');
     }
+    setNodeColor(sourceNode, '#95A5A6'); // P1 #6: user 灰色
 
     const answerNode = canvas.createTextNode({
       pos: {
@@ -339,12 +382,15 @@ export default class CanvasBranchExtension {
       focus: false,
     });
     setNodeRole(answerNode, 'assistant');
+    setNodeColor(answerNode, model.color || '#4A90D9'); // P1 #6: assistant 模型颜色
+    setNodeMetadata(answerNode, { modelConfigId: model.id });
 
     this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top');
 
     const messages: ChatMessage[] = [];
-    if (customInstructions) {
-      messages.push({ role: 'system', content: customInstructions });
+    const sysPrompt = model.systemPrompt || customInstructions;
+    if (sysPrompt) {
+      messages.push({ role: 'system', content: sysPrompt });
     }
     messages.push({ role: 'user', content: sourceNode.text });
 
@@ -357,6 +403,8 @@ export default class CanvasBranchExtension {
         answerNode.setText(fullText);
         this.autoFitHeight(answerNode);
       });
+      // P1 #10: 设置摘要
+      this.setNodeSummary(answerNode, fullText, model);
     } catch (error) {
       console.error('Branch Chat: API error', error);
       answerNode.setText(`❌ 请求失败: ${error}`);
@@ -375,7 +423,8 @@ export default class CanvasBranchExtension {
     toNodeId: string,
     fromSide: string = 'bottom',
     toSide: string = 'top',
-    label?: string
+    label?: string,
+    color?: string  // P1 #8: 分支颜色
   ): void {
     const canvasData = canvas.getData();
     canvasData.edges.push({
@@ -387,6 +436,7 @@ export default class CanvasBranchExtension {
       toSide: toSide as any,
       toEnd: 'arrow',
       label: label || undefined,
+      color: color || undefined,
     });
     canvas.setData(canvasData);
   }
@@ -397,5 +447,26 @@ export default class CanvasBranchExtension {
     if (actualHeight > nodeData.height) {
       node.setData({ ...nodeData, height: actualHeight });
     }
+  }
+
+  // ============================================================
+  // P1 #10: 节点自动命名（摘要）
+  // ============================================================
+
+  /**
+   * AI 回答完成后，将模型信息 + 摘要写入节点元数据
+   *
+   * Canvas 文本节点的 text 即为可见内容，无需额外命名。
+   * 但我们在元数据中记录摘要，用于导出和未来可能的节点标题显示。
+   *
+   * 同时在回答前面添加一行小字标注模型来源。
+   */
+  private setNodeSummary(node: CanvasRuntimeNode, fullText: string, model: ModelConfig): void {
+    const summary = truncateText(fullText.replace(/[#*>`\n]/g, ' ').trim(), 50);
+    setNodeMetadata(node, { chatSummary: summary });
+
+    // 在回答正文前添加模型标注（不破坏原文）
+    const prefix = `> ${model.icon || '🤖'} **${model.alias}**\n\n`;
+    node.setText(prefix + fullText);
   }
 }

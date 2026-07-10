@@ -71,3 +71,46 @@
 .branch-directions-container {
   margin-bottom: 8px;
 }
+
+/* ============================================================ */
+/* P1 #12: 快捷模板 chips
+/* ============================================================ */
+
+.branch-templates-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  margin-bottom: 12px;
+  border-top: 1px dashed var(--background-modifier-border);
+}
+
+.branch-templates-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.branch-template-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.branch-template-chip:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.branch-template-chip:active {
+  transform: scale(0.96);
+}

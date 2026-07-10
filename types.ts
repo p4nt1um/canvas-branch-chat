@@ -22,6 +22,10 @@ export interface ChatNodeData extends CanvasTextData {
   chatBranchId?: string;
   /** 使用的模型配置 ID（assistant 节点记录用哪个模型生成的） */
   modelConfigId?: string;
+  /** P1 #8: 分支颜色（视觉编码） */
+  chatBranchColor?: string;
+  /** P1 #10: 节点摘要标题 */
+  chatSummary?: string;
 }
 
 // ============================================================
@@ -201,6 +205,28 @@ export interface PresetGroup {
   models: ModelConfig[];
 }
 
+/** P1 #12: 分支方向快捷模板 */
+export interface BranchTemplate {
+  id: string;
+  text: string;
+  builtin: boolean;
+}
+
+/** 内置默认模板 */
+export const DEFAULT_BRANCH_TEMPLATES: BranchTemplate[] = [
+  { id: 'bt1', text: '从「____」角度分析', builtin: true },
+  { id: 'bt2', text: '换个思路继续', builtin: true },
+  { id: 'bt3', text: '深入探讨：____', builtin: true },
+  { id: 'bt4', text: '假设____不成立呢', builtin: true },
+  { id: 'bt5', text: '补充一个角度', builtin: true },
+];
+
+/** P1 #8: 分支颜色调色板 */
+export const BRANCH_COLOR_PALETTE = [
+  '#4A90D9', '#E74C3C', '#27AE60', '#F39C12',
+  '#9B59B6', '#E67E22', '#1ABC9C', '#34495E',
+];
+
 /** 插件设置（多模型版本） */
 export interface PluginSettingsV2 {
   /** 模型配置列表 */
@@ -211,6 +237,8 @@ export interface PluginSettingsV2 {
   customInstructions: string;
   /** 预设组 */
   presetGroups?: PresetGroup[];
+  /** P1 #12: 用户自定义快捷模板（undefined = 使用内置默认） */
+  branchTemplates?: BranchTemplate[];
 }
 
 /** Provider 默认配置 */
