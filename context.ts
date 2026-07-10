@@ -15,10 +15,11 @@ import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, CanvasData, ChatNode
 // ============================================================
 
 /**
- * 查找给定节点的父节点 ID（通过 edge 的 toNode == nodeId 反查 fromNode）
- * 
- * Canvas edge 方向：fromNode → toNode（从上到下）
- * 所以一个节点的"父节点"就是 edge.toNode == nodeId 的那条边的 fromNode
+ * 查找给定节点的父节点 ID
+ *
+ * 当节点有多条入边时，按以下优先级选择"对话父节点"：
+ * 1. 角色交替正确（user←assistant, assistant←user）
+ * 2. 都不匹配时 fallback 到第一个入边
  */
 export function findParentNodeId(
   canvas: CanvasRuntimeView,
@@ -26,13 +27,30 @@ export function findParentNodeId(
 ): string | null {
   const data: CanvasData = canvas.getData();
 
+  // 收集所有入边的 fromNode
+  const parentIds: string[] = [];
   for (const edge of data.edges) {
     if (edge.toNode === nodeId) {
-      return edge.fromNode;
+      parentIds.push(edge.fromNode);
     }
   }
 
-  return null;
+  if (parentIds.length === 0) return null;
+  if (parentIds.length === 1) return parentIds[0];
+
+  // 多入边：优先选角色交替正确的父节点
+  const childRole = getNodeRole(findNodeById(canvas, nodeId)!);
+  for (const pid of parentIds) {
+    const parentNode = findNodeById(canvas, pid);
+    if (!parentNode) continue;
+    const parentRole = getNodeRole(parentNode);
+    // user 的父应为 assistant，assistant 的父应为 user
+    if (childRole === 'user' && parentRole === 'assistant') return pid;
+    if (childRole === 'assistant' && parentRole === 'user') return pid;
+  }
+
+  // fallback: 第一个入边
+  return parentIds[0];
 }
 
 /**
