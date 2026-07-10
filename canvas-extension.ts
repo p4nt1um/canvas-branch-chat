@@ -208,22 +208,6 @@ export default class CanvasBranchExtension {
       })
     );
 
-    // 为每个分支创建追问输入节点
-    for (const branch of branches) {
-      const askNode = canvas.createTextNode({
-        pos: {
-          x: branch.answerNode.x,
-          y: branch.answerNode.y + branch.answerNode.height + 50,
-        },
-        text: '',
-        focus: branches.indexOf(branch) === 0,
-      });
-      setNodeRole(askNode, 'user');
-      // P1 #8: 继承分支颜色（仅元数据，不改节点颜色）
-      setNodeMetadata(askNode, { chatBranchColor: branch.bColor });
-      this.addEdge(canvas, branch.answerNode.id, askNode.id, 'bottom', 'top', undefined, branch.bColor);
-    }
-
     canvas.requestSave();
   }
 
@@ -244,35 +228,9 @@ export default class CanvasBranchExtension {
     // 读取源节点角色（元数据驱动）
     const role = getNodeRole(sourceNode);
 
-    // 情况1：在 AI 节点上追问 → 检查是否已有空 user 子节点
+    // 情况1：在 AI 节点上追问 → 提示用户先创建输入节点
     if (role === 'assistant') {
-      const childIds = findChildNodeIds(canvas, sourceNode.id);
-      const hasEmptyChild = childIds.some(id => {
-        const child = findNodeById(canvas, id);
-        if (!child) return false;
-        return getNodeRole(child) === 'user' && !getNodeText(child).trim();
-      });
-
-      if (hasEmptyChild) {
-        new Notice('💬 请在下方输入框输入追问内容，然后右键 → 继续追问');
-      } else {
-        const askNode = canvas.createTextNode({
-          pos: {
-            x: sourceNode.x,
-            y: sourceNode.y + sourceNode.height + 50,
-          },
-          text: '',
-          focus: true,
-        });
-        setNodeRole(askNode, 'user');
-        // P1 #8: 继承父节点的分支颜色（仅元数据）
-        const parentBranchColor = (sourceNode.getData() as any)?.chatBranchColor;
-        if (parentBranchColor) {
-          setNodeMetadata(askNode, { chatBranchColor: parentBranchColor });
-        }
-        this.addEdge(canvas, sourceNode.id, askNode.id, 'bottom', 'top');
-        new Notice('💬 输入追问内容后，右键 → 继续追问');
-      }
+      new Notice('💡 请创建一个新节点输入追问内容，然后右键 → 继续追问');
       return;
     }
 
@@ -331,20 +289,7 @@ export default class CanvasBranchExtension {
       answerNode.setText(`❌ 请求失败: ${error}`);
     }
 
-    // 4. 创建下一个追问输入节点
-    const askNode = canvas.createTextNode({
-      pos: {
-        x: answerNode.x,
-        y: answerNode.y + answerNode.height + 50,
-      },
-      text: '',
-      focus: true,
-    });
-    setNodeRole(askNode, 'user');
-    if (branchColor) {
-      setNodeMetadata(askNode, { chatBranchColor: branchColor });
-    }
-    this.addEdge(canvas, answerNode.id, askNode.id, 'bottom', 'top', undefined, branchColor);
+    // 不自动创建追问节点，用户按需自己创建
   }
 
   // ============================================================
@@ -360,6 +305,13 @@ export default class CanvasBranchExtension {
     const { model, apiKey } = mk;
 
     const customInstructions = this.plugin.settings.getSettings().customInstructions;
+
+    // 空内容拦截
+    const nodeText = sourceNode.text?.trim();
+    if (!nodeText) {
+      new Notice('请先输入内容，再提交到 AI');
+      return;
+    }
 
     // 标记源节点为 user（如果未标记）— 不修改源节点颜色
     if (!getNodeRole(sourceNode)) {
