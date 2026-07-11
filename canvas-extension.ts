@@ -30,9 +30,20 @@ export default class CanvasBranchExtension {
     this.plugin.registerEvent(
       this.plugin.app.workspace.on(
         'canvas:node-menu',
-        (menu: Menu, node: CanvasRuntimeNode) => {
+        ((menu: Menu, node: CanvasRuntimeNode) => {
           this.onNodeMenu(menu, node);
-        }
+        }) as any
+      )
+    );
+
+    // P2 #13: 尝试注册多选菜单事件
+    // Obsidian Canvas 内部可能有 'canvas:selection-menu' 事件
+    this.plugin.registerEvent(
+      this.plugin.app.workspace.on(
+        'canvas:selection-menu' as any,
+        ((menu: Menu, canvas: CanvasRuntimeView) => {
+          this.onSelectionMenu(menu, canvas);
+        }) as any
       )
     );
   }
@@ -66,42 +77,80 @@ export default class CanvasBranchExtension {
   // ============================================================
 
   private onNodeMenu(menu: Menu, node: CanvasRuntimeNode) {
-    const canvas = node.canvas;
-    if (!canvas) return;
+    const cv = node.canvas;
+    if (!cv) return;
 
     // P0 #1: 从此处分叉（弹窗内选模型）
     menu.addItem((item: MenuItem) => {
       item.setTitle('🔀 从此处分叉');
       item.setIcon('git-branch');
-      item.onClick(() => this.branchFromNode(node, canvas));
+      item.onClick(() => this.branchFromNode(node, cv));
     });
 
     // P2 #13: 合并分支（从当前节点发起）
     menu.addItem((item: MenuItem) => {
       item.setTitle('🔀 合并分支');
       item.setIcon('git-merge');
-      item.onClick(() => this.mergeBranches(canvas, node));
+      item.onClick(() => this.mergeBranches(cv, node));
     });
 
     // P0: 继续追问
     menu.addItem((item: MenuItem) => {
       item.setTitle('💬 继续追问');
       item.setIcon('message-circle');
-      item.onClick(() => this.continueChat(node, canvas));
+      item.onClick(() => this.continueChat(node, cv));
     });
 
     // 直接提交到 AI（不带上下文）
     menu.addItem((item: MenuItem) => {
       item.setTitle('🤖 提交到 AI');
       item.setIcon('bot');
-      item.onClick(() => this.submitToAi(node, canvas));
+      item.onClick(() => this.submitToAi(node, cv));
     });
 
     // P1 #9: 导出对话树
     menu.addItem((item: MenuItem) => {
       item.setTitle('📥 导出对话树');
       item.setIcon('download');
-      item.onClick(() => exportCanvasConversation(this.plugin.app, canvas, node.id));
+      item.onClick(() => exportCanvasConversation(this.plugin.app, cv, node.id));
+    });
+  }
+
+  // ============================================================
+  // P2 #13: 多选菜单
+  // ============================================================
+
+  /**
+   * 多选右键菜单回调
+   * 如果 Obsidian Canvas 不触发此事件，则静默不生效，不会报错。
+   */
+  private onSelectionMenu(menu: Menu, canvas: CanvasRuntimeView) {
+    const selectedNodes = this.getSelectedNodes(canvas);
+    if (selectedNodes.length < 2) return;
+
+    menu.addItem((item: MenuItem) => {
+      item.setTitle(`🔀 合并 ${selectedNodes.length} 个分支`);
+      item.setIcon('git-merge');
+      item.onClick(() => {
+        // 直接用选中节点列表打开合并弹窗
+        const models = this.plugin.settings.getModels();
+        const defaultModelId = this.plugin.settings.getDefaultModel()?.id || '';
+        new MergeModal(
+          this.plugin.app,
+          canvas,
+          selectedNodes[0].id,
+          models,
+          defaultModelId,
+          (result) => {
+            if (!result.confirmed) return;
+            // 如果用户在弹窗里勾选了其他节点，用勾选的；否则用多选的
+            this.doMerge(canvas, result.selectedNodeIds.length >= 2
+              ? result.selectedNodeIds
+              : selectedNodes.map(n => n.id),
+              result.prompt, result.modelId);
+          },
+        ).open();
+      });
     });
   }
 
@@ -427,6 +476,30 @@ export default class CanvasBranchExtension {
   // ============================================================
   // P2 #13: 多分支合并
   // ============================================================
+
+  /** 获取 Canvas 中当前选中的节点列表 */
+  private getSelectedNodes(canvas: CanvasRuntimeView): CanvasRuntimeNode[] {
+    const internalCanvas = canvas as any;
+
+    // Method 1: canvas.selection (Set/Map/Array)
+    if (internalCanvas.selection) {
+      const sel = internalCanvas.selection;
+      if (sel instanceof Set) return Array.from(sel);
+      if (sel instanceof Map) return Array.from(sel.values());
+      if (Array.isArray(sel)) return sel;
+    }
+
+    // Method 2: filter nodes by isSelected
+    const nodesMap = internalCanvas.nodes ?? internalCanvas._nodes;
+    if (nodesMap) {
+      const allNodes = nodesMap instanceof Map
+        ? Array.from(nodesMap.values())
+        : Object.values(nodesMap);
+      return allNodes.filter((n: any) => n.isSelected);
+    }
+
+    return [];
+  }
 
   /** 弹出合并弹窗 */
   private mergeBranches(
