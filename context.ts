@@ -286,3 +286,59 @@ export function buildBranchContext(
 
   return messages;
 }
+
+// ============================================================
+// 多节点合并上下文构建
+// ============================================================
+
+/** 查找节点入边的标签（分支方向标注） */
+export function findEdgeLabel(
+  canvas: CanvasRuntimeView,
+  toNodeId: string,
+): string | null {
+  const data = canvas.getData();
+  for (const edge of data.edges) {
+    if (edge.toNode === toNodeId && edge.label) {
+      return edge.label;
+    }
+  }
+  return null;
+}
+
+/**
+ * 构建合并上下文：收集多个节点内容 + 用户提示
+ *
+ * 每个节点作为独立分支呈现，附带入边标签（如果有）
+ */
+export function buildMergeContext(
+  canvas: CanvasRuntimeView,
+  sourceNodeIds: string[],
+  userPrompt: string,
+  systemPrompt?: string,
+): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
+  }
+
+  // 收集所有节点内容
+  const branches: string[] = [];
+  for (let i = 0; i < sourceNodeIds.length; i++) {
+    const node = findNodeById(canvas, sourceNodeIds[i]);
+    if (!node) continue;
+    const text = getNodeText(node).trim();
+    if (!text || text === '思考中...' || text === 'Loading...') continue;
+
+    const edgeLabel = findEdgeLabel(canvas, sourceNodeIds[i]);
+    const label = edgeLabel ? `（${edgeLabel}）` : '';
+    branches.push(`--- 分支 ${i + 1}${label} ---\n${text}`);
+  }
+
+  messages.push({
+    role: 'user',
+    content: `${branches.join('\n\n')}\n\n${userPrompt}`,
+  });
+
+  return messages;
+}

@@ -16,9 +16,10 @@ import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig, BRANCH_
 import { createProvider } from './providers';
 import { getNodeScrollHeight, generateId, truncateText } from './utils';
 import { BranchModal, BranchDirection } from './branch-modal';
-import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findChildNodeIds, findNodeById, getNodeText } from './context';
+import { buildBranchContext, buildContextFromChain, buildMergeContext, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findChildNodeIds, findNodeById, getNodeText } from './context';
 import { exportCanvasConversation } from './export';
 import { parseSkillTag } from './skill-scanner';
+import { MergeModal } from './merge-modal';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -74,6 +75,16 @@ export default class CanvasBranchExtension {
       item.setIcon('git-branch');
       item.onClick(() => this.branchFromNode(node, canvas));
     });
+
+    // P2 #13: 多分支合并（仅多选时出现）
+    const selectedNodes = this.getSelectedNodes(canvas);
+    if (selectedNodes.length >= 2) {
+      menu.addItem((item: MenuItem) => {
+        item.setTitle(`🔀 合并 ${selectedNodes.length} 个分支`);
+        item.setIcon('git-merge');
+        item.onClick(() => this.mergeBranches(canvas, selectedNodes));
+      });
+    }
 
     // P0: 继续追问
     menu.addItem((item: MenuItem) => {
@@ -414,5 +425,126 @@ export default class CanvasBranchExtension {
       chatSummary: summary,
       modelAlias: model.alias,
     });
+  }
+
+  // ============================================================
+  // P2 #13: 多分支合并
+  // ============================================================
+
+  /** 获取 Canvas 中当前选中的节点列表 */
+  private getSelectedNodes(canvas: CanvasRuntimeView): CanvasRuntimeNode[] {
+    const internalCanvas = canvas as any;
+
+    // Method 1: canvas.selection (Set/Map/Array)
+    if (internalCanvas.selection) {
+      const sel = internalCanvas.selection;
+      if (sel instanceof Set) return Array.from(sel);
+      if (sel instanceof Map) return Array.from(sel.values());
+      if (Array.isArray(sel)) return sel;
+    }
+
+    // Method 2: filter nodes by isSelected
+    const nodesMap = internalCanvas.nodes ?? internalCanvas._nodes;
+    if (nodesMap) {
+      const allNodes = nodesMap instanceof Map
+        ? Array.from(nodesMap.values())
+        : Object.values(nodesMap);
+      return allNodes.filter((n: any) => n.isSelected);
+    }
+
+    return [];
+  }
+
+  /** 弹出合并输入弹窗 */
+  private mergeBranches(
+    canvas: CanvasRuntimeView,
+    selectedNodes: CanvasRuntimeNode[],
+  ) {
+    const models = this.plugin.settings.getModels();
+    const defaultModelId = this.plugin.settings.getDefaultModel()?.id || '';
+
+    new MergeModal(
+      this.plugin.app,
+      selectedNodes.length,
+      models,
+      defaultModelId,
+      (result) => {
+        if (!result.confirmed) return;
+        this.doMerge(canvas, selectedNodes, result.prompt, result.modelId);
+      },
+    ).open();
+  }
+
+  /** 执行合并：创建汇总节点 + 连线 + AI 调用 */
+  private async doMerge(
+    canvas: CanvasRuntimeView,
+    sourceNodes: CanvasRuntimeNode[],
+    userPrompt: string,
+    modelId: string,
+  ) {
+    const model = this.plugin.settings.getModel(modelId)
+      || this.plugin.settings.getDefaultModel();
+    if (!model) {
+      new Notice('请先在设置中添加模型配置');
+      return;
+    }
+
+    const apiKey = this.plugin.settings.resolveApiKey(model);
+    if (!apiKey) {
+      new Notice(`无法解析 API Key，请检查环境变量 "${model.apiKeyEnvVar}"`);
+      return;
+    }
+
+    const customInstructions = this.plugin.settings.getSettings().customInstructions;
+
+    // 计算汇总节点位置：居中 + 置于所有源节点下方
+    const xs = sourceNodes.map(n => n.x);
+    const maxBottom = Math.max(...sourceNodes.map(n => n.y + (n.height || 200)));
+    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const maxWidth = Math.max(...sourceNodes.map(n => n.width || 400));
+
+    // 创建汇总节点
+    const summaryNode = canvas.createTextNode({
+      pos: { x: centerX, y: maxBottom + 60 },
+      text: '思考中...',
+      size: { width: maxWidth, height: 200 },
+      focus: false,
+    });
+    setNodeRole(summaryNode, 'assistant');
+    setNodeColor(summaryNode, model.color || '#4A90D9');
+    setNodeMetadata(summaryNode, { modelConfigId: model.id });
+
+    // 连线：每个源节点 → 汇总节点
+    for (const srcNode of sourceNodes) {
+      const bColor = (srcNode.getData() as any)?.chatBranchColor;
+      this.addEdge(canvas, srcNode.id, summaryNode.id, 'bottom', 'top', undefined, bColor);
+    }
+
+    // 构建合并上下文
+    const systemPrompt = model.systemPrompt || customInstructions;
+    const messages = buildMergeContext(
+      canvas,
+      sourceNodes.map(n => n.id),
+      userPrompt,
+      systemPrompt,
+    );
+
+    // 流式请求
+    const provider = createProvider(model, apiKey);
+    let fullText = '';
+
+    try {
+      await provider.streamChat(messages, (token: string) => {
+        fullText += token;
+        summaryNode.setText(fullText);
+        this.autoFitHeight(summaryNode);
+      });
+      this.setNodeSummary(summaryNode, fullText, model);
+    } catch (error) {
+      console.error('Branch Chat: merge API error', error);
+      summaryNode.setText(`❌ 请求失败: ${error}`);
+    }
+
+    canvas.requestSave();
   }
 }
