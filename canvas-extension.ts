@@ -76,15 +76,12 @@ export default class CanvasBranchExtension {
       item.onClick(() => this.branchFromNode(node, canvas));
     });
 
-    // P2 #13: 多分支合并（仅多选时出现）
-    const selectedNodes = this.getSelectedNodes(canvas);
-    if (selectedNodes.length >= 2) {
-      menu.addItem((item: MenuItem) => {
-        item.setTitle(`🔀 合并 ${selectedNodes.length} 个分支`);
-        item.setIcon('git-merge');
-        item.onClick(() => this.mergeBranches(canvas, selectedNodes));
-      });
-    }
+    // P2 #13: 合并分支（从当前节点发起）
+    menu.addItem((item: MenuItem) => {
+      item.setTitle('🔀 合并分支');
+      item.setIcon('git-merge');
+      item.onClick(() => this.mergeBranches(canvas, node));
+    });
 
     // P0: 继续追问
     menu.addItem((item: MenuItem) => {
@@ -431,46 +428,27 @@ export default class CanvasBranchExtension {
   // P2 #13: 多分支合并
   // ============================================================
 
-  /** 获取 Canvas 中当前选中的节点列表 */
-  private getSelectedNodes(canvas: CanvasRuntimeView): CanvasRuntimeNode[] {
-    const internalCanvas = canvas as any;
-
-    // Method 1: canvas.selection (Set/Map/Array)
-    if (internalCanvas.selection) {
-      const sel = internalCanvas.selection;
-      if (sel instanceof Set) return Array.from(sel);
-      if (sel instanceof Map) return Array.from(sel.values());
-      if (Array.isArray(sel)) return sel;
-    }
-
-    // Method 2: filter nodes by isSelected
-    const nodesMap = internalCanvas.nodes ?? internalCanvas._nodes;
-    if (nodesMap) {
-      const allNodes = nodesMap instanceof Map
-        ? Array.from(nodesMap.values())
-        : Object.values(nodesMap);
-      return allNodes.filter((n: any) => n.isSelected);
-    }
-
-    return [];
-  }
-
-  /** 弹出合并输入弹窗 */
+  /** 弹出合并弹窗 */
   private mergeBranches(
     canvas: CanvasRuntimeView,
-    selectedNodes: CanvasRuntimeNode[],
+    currentNode: CanvasRuntimeNode,
   ) {
     const models = this.plugin.settings.getModels();
     const defaultModelId = this.plugin.settings.getDefaultModel()?.id || '';
 
     new MergeModal(
       this.plugin.app,
-      selectedNodes.length,
+      canvas,
+      currentNode.id,
       models,
       defaultModelId,
       (result) => {
         if (!result.confirmed) return;
-        this.doMerge(canvas, selectedNodes, result.prompt, result.modelId);
+        if (result.selectedNodeIds.length < 2) {
+          new Notice('请至少选择 2 个节点进行合并');
+          return;
+        }
+        this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
       },
     ).open();
   }
@@ -478,7 +456,7 @@ export default class CanvasBranchExtension {
   /** 执行合并：创建汇总节点 + 连线 + AI 调用 */
   private async doMerge(
     canvas: CanvasRuntimeView,
-    sourceNodes: CanvasRuntimeNode[],
+    sourceNodeIds: string[],
     userPrompt: string,
     modelId: string,
   ) {
@@ -497,7 +475,18 @@ export default class CanvasBranchExtension {
 
     const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
-    // 计算汇总节点位置：居中 + 置于所有源节点下方
+    // 获取所有源节点
+    const sourceNodes: CanvasRuntimeNode[] = [];
+    for (const id of sourceNodeIds) {
+      const node = findNodeById(canvas, id);
+      if (node) sourceNodes.push(node);
+    }
+    if (sourceNodes.length < 2) {
+      new Notice('未能找到足够的节点');
+      return;
+    }
+
+    // 计算汇总节点位置
     const xs = sourceNodes.map(n => n.x);
     const maxBottom = Math.max(...sourceNodes.map(n => n.y + (n.height || 200)));
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
@@ -524,7 +513,7 @@ export default class CanvasBranchExtension {
     const systemPrompt = model.systemPrompt || customInstructions;
     const messages = buildMergeContext(
       canvas,
-      sourceNodes.map(n => n.id),
+      sourceNodeIds,
       userPrompt,
       systemPrompt,
     );

@@ -1,16 +1,18 @@
 /**
  * merge-modal.ts — 多分支合并输入弹窗
  *
- * 选中多个节点 → 右键「合并分支」→ 此弹窗
- * 预填「总结以上观点」，用户可自由修改
+ * 右键节点 → 合并分支 → 选择要合并的节点 + 输入提问
  */
 
 import { App, Modal, Setting } from 'obsidian';
 import { ModelConfig } from './types';
+import { CanvasRuntimeNode, CanvasRuntimeView } from './types';
+import { getNodeRole, getNodeText } from './context';
 
 export interface MergeModalResult {
   prompt: string;
   modelId: string;
+  selectedNodeIds: string[];
   confirmed: boolean;
 }
 
@@ -20,21 +22,26 @@ export class MergeModal extends Modal {
   private result: MergeModalResult;
   private onSubmit: (result: MergeModalResult) => void;
   private models: ModelConfig[];
-  private branchCount: number;
+  private canvas: CanvasRuntimeView;
+  private currentNodeId: string;
+  private checkedNodes: Set<string>;
 
   constructor(
     app: App,
-    branchCount: number,
+    canvas: CanvasRuntimeView,
+    currentNodeId: string,
     models: ModelConfig[],
     defaultModelId: string,
     onSubmit: (result: MergeModalResult) => void,
   ) {
     super(app);
-    this.branchCount = branchCount;
+    this.canvas = canvas;
+    this.currentNodeId = currentNodeId;
     this.models = models;
     this.modelId = defaultModelId;
     this.onSubmit = onSubmit;
-    this.result = { prompt: '', modelId: '', confirmed: false };
+    this.checkedNodes = new Set([currentNodeId]);
+    this.result = { prompt: '', modelId: '', selectedNodeIds: [], confirmed: false };
   }
 
   onOpen() {
@@ -42,10 +49,54 @@ export class MergeModal extends Modal {
     contentEl.empty();
 
     contentEl.createEl('h2', { text: '🔀 合并分支' });
-    contentEl.createEl('p', {
-      text: `${this.branchCount} 个分支的内容将作为上下文发送给 AI，AI 会根据你的提问生成汇总节点。`,
-      cls: 'branch-modal-hint',
-    });
+
+    // 节点选择列表
+    contentEl.createEl('h3', { text: '选择要合并的节点' });
+    const nodeList = contentEl.createDiv({ cls: 'merge-node-list' });
+
+    const candidates = this.getCandidateNodes();
+    for (const node of candidates) {
+      const isCurrent = node.id === this.currentNodeId;
+      const role = getNodeRole(node);
+      const text = getNodeText(node).trim();
+      const preview = text.substring(0, 60).replace(/[#*>`\n]/g, ' ');
+      const roleIcon = role === 'assistant' ? '🤖' : role === 'user' ? '👤' : '📝';
+
+      const row = nodeList.createDiv({ cls: 'merge-node-row' });
+      const checkbox = row.createEl('input', { type: 'checkbox' });
+      checkbox.checked = isCurrent;
+      checkbox.disabled = isCurrent; // 当前节点固定勾选
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          this.checkedNodes.add(node.id);
+        } else {
+          this.checkedNodes.delete(node.id);
+        }
+      });
+
+      row.createEl('span', {
+        text: `${roleIcon} ${preview}${text.length > 60 ? '...' : ''}`,
+        cls: isCurrent ? 'merge-node-current' : '',
+      });
+      if (isCurrent) {
+        row.createEl('span', { text: '（当前）', cls: 'merge-node-current-tag' });
+      }
+    }
+
+    // 提问输入
+    contentEl.createEl('h3', { text: '提问' });
+    new Setting(contentEl)
+      .setDesc('可以是总结、对比、或其他任何问题')
+      .addTextArea((text) => {
+        text.setPlaceholder('总结以上观点');
+        text.setValue(this.prompt);
+        text.inputEl.style.width = '100%';
+        text.inputEl.style.minHeight = '60px';
+        text.onChange((value) => {
+          this.prompt = value;
+        });
+        setTimeout(() => text.inputEl.focus(), 50);
+      });
 
     // 模型选择
     if (this.models.length > 0) {
@@ -62,22 +113,6 @@ export class MergeModal extends Modal {
         });
     }
 
-    // 提问输入
-    new Setting(contentEl)
-      .setName('提问')
-      .setDesc('可以是总结、对比、或其他任何问题')
-      .addTextArea((text) => {
-        text.setPlaceholder('总结以上观点');
-        text.setValue(this.prompt);
-        text.inputEl.style.width = '100%';
-        text.inputEl.style.minHeight = '60px';
-        text.onChange((value) => {
-          this.prompt = value;
-        });
-        // 自动聚焦
-        setTimeout(() => text.inputEl.focus(), 50);
-      });
-
     // 操作按钮
     new Setting(contentEl)
       .addButton((btn) =>
@@ -91,11 +126,29 @@ export class MergeModal extends Modal {
       );
   }
 
+  /** 获取候选节点：有内容的文本节点 */
+  private getCandidateNodes(): CanvasRuntimeNode[] {
+    const internalCanvas = this.canvas as any;
+    const nodesMap = internalCanvas.nodes ?? internalCanvas._nodes;
+    if (!nodesMap) return [];
+
+    const allNodes = nodesMap instanceof Map
+      ? Array.from(nodesMap.values())
+      : Object.values(nodesMap);
+
+    return allNodes.filter((n: any) => {
+      const text = getNodeText(n).trim();
+      return text && text !== '思考中...' && text !== 'Loading...';
+    });
+  }
+
   private confirm() {
     if (!this.prompt.trim()) return;
+    if (this.checkedNodes.size === 0) return;
     this.result = {
       prompt: this.prompt.trim(),
       modelId: this.modelId,
+      selectedNodeIds: Array.from(this.checkedNodes),
       confirmed: true,
     };
     this.close();
