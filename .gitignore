@@ -20,3 +20,5 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
+article-v0.1.0.md
+assets/
