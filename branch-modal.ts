@@ -73,16 +73,16 @@ export class BranchModal extends Modal {
       this.renderGlobalModelSelector();
     }
 
+    // P2 #16: 框架预设下拉（在方向列表上方）
+    if (this.frameworks.length > 0) {
+      this.renderFrameworkSelector();
+    }
+
     this.directionsContainer = contentEl.createDiv({ cls: 'branch-directions-container' });
     this.renderDirections();
 
     // 快捷模板
     this.renderTemplates();
-
-    // P2 #16: 框架预设下拉
-    if (this.frameworks.length > 0) {
-      this.renderFrameworkSelector();
-    }
 
     // Skills 选择
     if (this.skills.length > 0) {
