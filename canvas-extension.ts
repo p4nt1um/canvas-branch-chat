@@ -18,6 +18,7 @@ import { getNodeScrollHeight, generateId, truncateText } from './utils';
 import { BranchModal } from './branch-modal';
 import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findChildNodeIds, findNodeById, getNodeText } from './context';
 import { exportCanvasConversation } from './export';
+import { parseSkillTag } from './skill-scanner';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -122,10 +123,11 @@ export default class CanvasBranchExtension {
     canvas: CanvasRuntimeView,
     selectedModel?: ModelConfig
   ) {
+    const skills = this.plugin.skillScanner.getSkills();
     new BranchModal(this.plugin.app, (result) => {
       if (!result.confirmed) return;
       this.doBranch(sourceNode, canvas, result.directions, selectedModel);
-    }).open();
+    }, undefined, skills).open();
   }
 
   private async doBranch(
@@ -177,11 +179,23 @@ export default class CanvasBranchExtension {
 
       this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', direction, bColor);
 
+      // P2 #21: 检测 /skill-name 前缀，注入 SKILL.md body
+      const skillTag = parseSkillTag(direction);
+      const effectiveDirection = skillTag ? skillTag.direction : direction;
+      let effectiveSystemPrompt = model.systemPrompt || customInstructions;
+
+      if (skillTag) {
+        const skill = this.plugin.skillScanner.getSkill(skillTag.skillName);
+        if (skill) {
+          effectiveSystemPrompt = `${skill.body}\n\n---\n\n${effectiveSystemPrompt}`;
+        }
+      }
+
       const messages = buildBranchContext(
         canvas,
         sourceNode.id,
-        direction,
-        model.systemPrompt || customInstructions
+        effectiveDirection,
+        effectiveSystemPrompt
       );
 
       return { answerNode, messages, direction, bColor };

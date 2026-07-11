@@ -152,6 +152,20 @@ export interface ChatProvider {
 /** Provider 执行模式 */
 export type ProviderType = 'openai' | 'claude-cli';
 
+/** Skills 集成：解析后的 SKILL.md 信息 */
+export interface SkillInfo {
+  /** 技能名（SKILL.md frontmatter name） */
+  name: string;
+  /** 技能描述（SKILL.md frontmatter description） */
+  description: string;
+  /** SKILL.md body（不含 frontmatter） */
+  body: string;
+  /** 文件路径 */
+  path: string;
+  /** 来源 */
+  source: 'global' | 'project';
+}
+
 /** Provider 配置 */
 export interface ProviderConfig {
   /** Provider 名称（如 'deepseek', 'openai', 'custom'） */

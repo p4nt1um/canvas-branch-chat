@@ -7,10 +7,12 @@
 import { Plugin, Notice } from 'obsidian';
 import SettingsManager from './settings';
 import CanvasBranchExtension from './canvas-extension';
+import { SkillScanner } from './skill-scanner';
 
 export default class CanvasBranchChatPlugin extends Plugin {
   settings: SettingsManager;
   private canvasExtension: CanvasBranchExtension;
+  skillScanner: SkillScanner;
 
   async onload() {
     // 1. 加载设置
@@ -18,7 +20,13 @@ export default class CanvasBranchChatPlugin extends Plugin {
     await this.settings.loadSettings();
     this.settings.addSettingsTab();
 
-    // 2. 注册 Canvas 分支对话扩展
+    // 2. 初始化 Skills 扫描器
+    this.skillScanner = new SkillScanner((this.app.vault.adapter as any).basePath || '');
+    this.skillScanner.scan().then((skills) => {
+      console.log(`Canvas Branch Chat: loaded ${skills.length} skills`);
+    }).catch(() => {});
+
+    // 3. 注册 Canvas 分支对话扩展
     this.canvasExtension = new CanvasBranchExtension(this);
 
     // 3. P1 #9: 注册导出命令

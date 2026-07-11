@@ -9,7 +9,8 @@
  */
 
 import { App, Modal, Setting, ButtonComponent } from 'obsidian';
-import { BranchTemplate, DEFAULT_BRANCH_TEMPLATES } from './types';
+import { BranchTemplate, DEFAULT_BRANCH_TEMPLATES, SkillInfo } from './types';
+import { SkillSuggestModal } from './skill-suggest-modal';
 
 export interface BranchModalResult {
   directions: string[];
@@ -24,12 +25,14 @@ export class BranchModal extends Modal {
   private focusedInputIndex: number = 0; // P1 #12: 跟踪聚焦输入框
   private inputElements: HTMLInputElement[] = []; // P1 #12: 输入框引用
   private templates: BranchTemplate[]; // P1 #12: 模板列表
+  private skills: SkillInfo[]; // P2 #21: 可用 Skills
 
-  constructor(app: App, onSubmit: (result: BranchModalResult) => void, templates?: BranchTemplate[]) {
+  constructor(app: App, onSubmit: (result: BranchModalResult) => void, templates?: BranchTemplate[], skills?: SkillInfo[]) {
     super(app);
     this.onSubmit = onSubmit;
     this.result = { directions: [], confirmed: false };
     this.templates = templates || DEFAULT_BRANCH_TEMPLATES;
+    this.skills = skills || [];
   }
 
   onOpen() {
@@ -48,6 +51,11 @@ export class BranchModal extends Modal {
 
     // P1 #12: 快捷模板
     this.renderTemplates();
+
+    // P2 #21: Skills 选择
+    if (this.skills.length > 0) {
+      this.renderSkillSelector();
+    }
 
     // 添加方向按钮
     new Setting(contentEl)
@@ -148,6 +156,41 @@ export class BranchModal extends Modal {
         e.preventDefault();
         this.insertTemplate(tpl.text);
       });
+    }
+  }
+
+  /**
+   * P2 #21: 渲染 Skills 选择器
+   */
+  private renderSkillSelector() {
+    const { contentEl } = this;
+    const skillContainer = contentEl.createDiv({ cls: 'branch-skills-container' });
+
+    new Setting(skillContainer)
+      .setName('🧠 使用 Skill')
+      .setDesc('在方向前加上 /skill-name，AI 将按预设角色展开讨论')
+      .addButton((btn: ButtonComponent) => {
+        btn
+          .setButtonText('浏览所有 Skills')
+          .onClick(() => {
+            new SkillSuggestModal(this.app, this.skills, (skill) => {
+              this.insertSkill(`/${skill.name}`);
+            }).open();
+          });
+      });
+  }
+
+  /** P2 #21: 将 /skill-name 插入当前聚焦输入框 */
+  private insertSkill(prefix: string) {
+    const idx = this.focusedInputIndex;
+    const current = this.directions[idx] || '';
+    const newText = `${prefix} ${current}`.trim();
+    this.directions[idx] = newText;
+
+    const input = this.inputElements[idx];
+    if (input) {
+      input.value = newText;
+      input.focus();
     }
   }
 
