@@ -9,7 +9,7 @@ import { App, Modal, Setting, Notice } from 'obsidian';
 import { ModelConfig, ChatMessage } from './types';
 import { CanvasRuntimeNode, CanvasRuntimeView } from './types';
 import { createProvider } from './providers';
-import { getAncestorChain, buildContextFromChain, getNodeRole, getNodeText } from './context';
+import { getAncestorChain, buildContextFromChain, getNodeRole, getNodeText, findNodeById } from './context';
 
 export interface FollowUpModalResult {
   /** 输入框内容 */
@@ -139,8 +139,7 @@ export class FollowUpModal extends Modal {
     // 取最近 3 个 assistant 节点的文本
     let assistantCount = 0;
     for (let i = chain.length - 1; i >= 0 && assistantCount < 3; i--) {
-      const node = (this.canvas as any)?.nodes?.get?.(chain[i])
-        || (this.canvas as any)?.nodes?.[chain[i]];
+      const node = findNodeById(this.canvas, chain[i]);
       if (!node) continue;
       if (getNodeRole(node) !== 'assistant') continue;
       assistantCount++;
