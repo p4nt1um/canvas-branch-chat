@@ -2,7 +2,7 @@
  * merge-modal.ts — 多分支合并输入弹窗
  *
  * 选中多个节点 → 右键「合并分支」→ 此弹窗
- * 预填「总结以下观点」，用户可自由修改
+ * 预填「总结以上观点」，用户可自由修改
  */
 
 import { App, Modal, Setting } from 'obsidian';
@@ -15,7 +15,7 @@ export interface MergeModalResult {
 }
 
 export class MergeModal extends Modal {
-  private prompt: string = '总结以下观点';
+  private prompt: string = '总结以上观点';
   private modelId: string;
   private result: MergeModalResult;
   private onSubmit: (result: MergeModalResult) => void;
@@ -67,7 +67,7 @@ export class MergeModal extends Modal {
       .setName('提问')
       .setDesc('可以是总结、对比、或其他任何问题')
       .addTextArea((text) => {
-        text.setPlaceholder('总结以下观点');
+        text.setPlaceholder('总结以上观点');
         text.setValue(this.prompt);
         text.inputEl.style.width = '100%';
         text.inputEl.style.minHeight = '60px';
