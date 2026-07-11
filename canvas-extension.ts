@@ -15,7 +15,7 @@ import CanvasBranchChatPlugin from './main';
 import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig, BRANCH_COLOR_PALETTE } from './types';
 import { createProvider } from './providers';
 import { getNodeScrollHeight, generateId, truncateText } from './utils';
-import { BranchModal } from './branch-modal';
+import { BranchModal, BranchDirection } from './branch-modal';
 import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findChildNodeIds, findNodeById, getNodeText } from './context';
 import { exportCanvasConversation } from './export';
 import { parseSkillTag } from './skill-scanner';
@@ -68,29 +68,12 @@ export default class CanvasBranchExtension {
     const canvas = node.canvas;
     if (!canvas) return;
 
-    const models = this.plugin.settings.getModels();
-
-    // P0 #1: 从此处分叉（默认模型）
+    // P0 #1: 从此处分叉（弹窗内选模型）
     menu.addItem((item: MenuItem) => {
       item.setTitle('🔀 从此处分叉');
       item.setIcon('git-branch');
       item.onClick(() => this.branchFromNode(node, canvas));
     });
-
-    // P1 #5: 选择模型分叉（子菜单）
-    if (models.length > 1) {
-      menu.addItem((item: MenuItem) => {
-        item.setTitle('🏷️ 指定模型分叉');
-        item.setIcon('users');
-        const submenu = (item as any).setSubmenu?.() ?? item;
-        for (const model of models) {
-          submenu.addItem((sub: MenuItem) => {
-            sub.setTitle(`${model.icon || '🤖'} ${model.alias}`);
-            sub.onClick(() => this.branchFromNode(node, canvas, model));
-          });
-        }
-      });
-    }
 
     // P0: 继续追问
     menu.addItem((item: MenuItem) => {
@@ -121,28 +104,29 @@ export default class CanvasBranchExtension {
   private branchFromNode(
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView,
-    selectedModel?: ModelConfig
   ) {
     const skills = this.plugin.skillScanner.getSkills();
-    new BranchModal(this.plugin.app, (result) => {
-      if (!result.confirmed) return;
-      this.doBranch(sourceNode, canvas, result.directions, selectedModel);
-    }, undefined, skills).open();
+    const models = this.plugin.settings.getModels();
+    const defaultModelId = this.plugin.settings.getDefaultModel()?.id || '';
+
+    new BranchModal(
+      this.plugin.app,
+      (result) => {
+        if (!result.confirmed) return;
+        this.doBranch(sourceNode, canvas, result.directions);
+      },
+      undefined,
+      skills,
+      models,
+      defaultModelId,
+    ).open();
   }
 
   private async doBranch(
     sourceNode: CanvasRuntimeNode,
     canvas: CanvasRuntimeView,
-    directions: string[],
-    selectedModel?: ModelConfig
+    directions: BranchDirection[],
   ) {
-    // 模型选择：优先使用传入的模型，否则用默认模型
-    const mk = selectedModel
-      ? this.resolveModelKey(selectedModel)
-      : this.getModelAndKey();
-    if (!mk) return;
-    const { model, apiKey } = mk;
-
     const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
     // 标记源节点为 user（如果未标记）— 不修改源节点颜色
@@ -158,7 +142,13 @@ export default class CanvasBranchExtension {
     const branchColor = (index: number) => BRANCH_COLOR_PALETTE[index % BRANCH_COLOR_PALETTE.length];
 
     // 为每个方向创建 AI 回答节点 + 连线
-    const branches = directions.map((direction, i) => {
+    const branches = directions.map((dir, i) => {
+      // 按方向取模型
+      const model = this.plugin.settings.getModel(dir.modelId) || this.plugin.settings.getDefaultModel();
+      if (!model) return null;
+      const apiKey = this.plugin.settings.resolveApiKey(model);
+      if (!apiKey) return null;
+
       const yOffset = i * (nodeHeight + nodeSpacing);
       const bColor = branchColor(i);
 
@@ -172,16 +162,13 @@ export default class CanvasBranchExtension {
         focus: false,
       });
       setNodeRole(answerNode, 'assistant');
-      // P1 #6: assistant 节点用模型颜色
       setNodeColor(answerNode, model.color || '#4A90D9');
-      // P1 #8: 记录分支颜色
       setNodeMetadata(answerNode, { chatBranchColor: bColor, modelConfigId: model.id });
 
-      this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', direction, bColor);
-
-      // P2 #21: 检测 /skill-name 前缀，注入 SKILL.md body
-      const skillTag = parseSkillTag(direction);
-      const effectiveDirection = skillTag ? skillTag.direction : direction;
+      // P2 #21: 检测 /skill-name 前缀
+      const skillTag = parseSkillTag(dir.text);
+      const effectiveDirection = skillTag ? skillTag.direction : dir.text;
+      const edgeLabel = effectiveDirection; // 边标签不含 skill 前缀
       let effectiveSystemPrompt = model.systemPrompt || customInstructions;
 
       if (skillTag) {
@@ -191,19 +178,21 @@ export default class CanvasBranchExtension {
         }
       }
 
+      this.addEdge(canvas, sourceNode.id, answerNode.id, 'right', 'top', edgeLabel, bColor);
+
       const messages = buildBranchContext(
         canvas,
         sourceNode.id,
         effectiveDirection,
-        effectiveSystemPrompt
+        effectiveSystemPrompt,
       );
 
-      return { answerNode, messages, direction, bColor };
-    });
+      return { answerNode, messages, model, apiKey };
+    }).filter((b): b is NonNullable<typeof b> => b !== null);
 
-    // 并行请求所有方向
+    // 并行请求所有方向（每方向独立模型）
     await Promise.allSettled(
-      branches.map(async ({ answerNode, messages }) => {
+      branches.map(async ({ answerNode, messages, model, apiKey }) => {
         const provider = createProvider(model, apiKey);
         let fullText = '';
 
