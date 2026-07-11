@@ -20,6 +20,7 @@ import { buildBranchContext, buildContextFromChain, buildMergeContext, getAncest
 import { exportCanvasConversation } from './export';
 import { parseSkillTag } from './skill-scanner';
 import { MergeModal } from './merge-modal';
+import { FollowUpModal } from './follow-up-modal';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -275,84 +276,109 @@ export default class CanvasBranchExtension {
   }
 
   // ============================================================
-  // P0: 继续追问
+  // P0: 继续追问（弹窗式）
   // ============================================================
 
-  private async continueChat(
+  /**
+   * 右键任意节点 → 弹窗输入追问 → 自动建 user 节点 + AI 节点
+   *
+   * 解决旧版问题：手动建节点缺少 chatRole 和 edge，导致上下文断裂。
+   */
+  private continueChat(
     sourceNode: CanvasRuntimeNode,
-    canvas: CanvasRuntimeView
+    canvas: CanvasRuntimeView,
   ) {
-    const mk = this.getModelAndKey();
-    if (!mk) return;
-    const { model, apiKey } = mk;
+    const models = this.plugin.settings.getModels();
+    const defaultModelId = this.plugin.settings.getDefaultModel()?.id || '';
 
-    const customInstructions = this.plugin.settings.getSettings().customInstructions;
+    new FollowUpModal(
+      this.plugin.app,
+      models,
+      defaultModelId,
+      async (result) => {
+        if (!result.confirmed) return;
 
-    // 读取源节点角色（元数据驱动）
-    const role = getNodeRole(sourceNode);
+        const model = this.plugin.settings.getModel(result.modelId)
+          || this.plugin.settings.getDefaultModel();
+        if (!model) {
+          new Notice('请先在设置中添加模型配置');
+          return;
+        }
+        const apiKey = this.plugin.settings.resolveApiKey(model);
+        if (!apiKey) {
+          new Notice(`无法解析 API Key，请检查环境变量 "${model.apiKeyEnvVar}"`);
+          return;
+        }
 
-    // 情况1：在 AI 节点上追问 → 提示用户先创建输入节点
-    if (role === 'assistant') {
-      new Notice('💡 请创建一个新节点输入追问内容，然后右键 → 继续追问');
-      return;
-    }
+        const customInstructions = this.plugin.settings.getSettings().customInstructions;
 
-    // 情况2：user 节点但文本为空
-    const nodeText = sourceNode.text?.trim();
-    if (!nodeText) {
-      new Notice('请先输入你的问题');
-      return;
-    }
+        // 继承分支颜色
+        const branchColor = (sourceNode.getData() as any)?.chatBranchColor;
 
-    // 1. 创建 AI 回答节点
-    const answerNode = canvas.createTextNode({
-      pos: {
-        x: sourceNode.x,
-        y: sourceNode.y + sourceNode.height + 50,
+        // 1. 创建 user 节点（自动带 chatRole + edge）
+        const userNode = canvas.createTextNode({
+          pos: {
+            x: sourceNode.x,
+            y: sourceNode.y + sourceNode.height + 50,
+          },
+          text: result.prompt,
+          size: { width: sourceNode.width, height: 120 },
+          focus: false,
+        });
+        setNodeRole(userNode, 'user');
+        if (branchColor) {
+          setNodeMetadata(userNode, { chatBranchColor: branchColor });
+        }
+        this.addEdge(canvas, sourceNode.id, userNode.id, 'bottom', 'top', undefined, branchColor);
+
+        // 2. 创建 AI 回答节点
+        const answerNode = canvas.createTextNode({
+          pos: {
+            x: userNode.x,
+            y: userNode.y + 120 + 50,
+          },
+          text: '思考中...',
+          size: { width: sourceNode.width, height: sourceNode.height },
+          focus: false,
+        });
+        setNodeRole(answerNode, 'assistant');
+        setNodeColor(answerNode, model.color || '#4A90D9');
+        setNodeMetadata(answerNode, { modelConfigId: model.id });
+        if (branchColor) {
+          setNodeMetadata(answerNode, { chatBranchColor: branchColor });
+        }
+        this.addEdge(canvas, userNode.id, answerNode.id, 'bottom', 'top', undefined, branchColor);
+
+        // 3. 构建上下文（从 user 节点向上遍历，包含完整祖先链）
+        const chain = getAncestorChain(canvas, userNode.id);
+        const historyMessages = buildContextFromChain(canvas, chain);
+
+        const messages: ChatMessage[] = [];
+        const sysPrompt = model.systemPrompt || customInstructions;
+        if (sysPrompt) {
+          messages.push({ role: 'system', content: sysPrompt });
+        }
+        messages.push(...historyMessages);
+
+        // 4. 流式请求
+        const provider = createProvider(model, apiKey);
+        let fullText = '';
+
+        try {
+          await provider.streamChat(messages, (token: string) => {
+            fullText += token;
+            answerNode.setText(fullText);
+            this.autoFitHeight(answerNode);
+          });
+          this.setNodeSummary(answerNode, fullText, model);
+        } catch (error) {
+          console.error('Branch Chat: follow-up API error', error);
+          answerNode.setText(`❌ 请求失败: ${error}`);
+        }
+
+        canvas.requestSave();
       },
-      text: '思考中...',
-      size: { width: sourceNode.width, height: sourceNode.height },
-      focus: false,
-    });
-    setNodeRole(answerNode, 'assistant');
-    setNodeColor(answerNode, model.color || '#4A90D9'); // P1 #6: assistant 用模型颜色
-    // P1 #8: 继承分支颜色
-    const branchColor = (sourceNode.getData() as any)?.chatBranchColor;
-    if (branchColor) {
-      setNodeMetadata(answerNode, { chatBranchColor: branchColor });
-    }
-
-    this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top', undefined, branchColor);
-
-    // 2. 构建上下文（直系祖先链）
-    const chain = getAncestorChain(canvas, sourceNode.id);
-    const historyMessages = buildContextFromChain(canvas, chain);
-
-    const messages: ChatMessage[] = [];
-    const sysPrompt = model.systemPrompt || customInstructions;
-    if (sysPrompt) {
-      messages.push({ role: 'system', content: sysPrompt });
-    }
-    messages.push(...historyMessages);
-
-    // 3. 流式请求
-    const provider = createProvider(model, apiKey);
-    let fullText = '';
-
-    try {
-      await provider.streamChat(messages, (token: string) => {
-        fullText += token;
-        answerNode.setText(fullText);
-        this.autoFitHeight(answerNode);
-      });
-      // P1 #10: AI 回答完成后设置摘要
-      this.setNodeSummary(answerNode, fullText, model);
-    } catch (error) {
-      console.error('Branch Chat: API error', error);
-      answerNode.setText(`❌ 请求失败: ${error}`);
-    }
-
-    // 不自动创建追问节点，用户按需自己创建
+    ).open();
   }
 
   // ============================================================
