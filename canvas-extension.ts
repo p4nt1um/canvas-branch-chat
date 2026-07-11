@@ -13,7 +13,7 @@
 import { Menu, MenuItem, Notice } from 'obsidian';
 import CanvasBranchChatPlugin from './main';
 import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig, BRANCH_COLOR_PALETTE } from './types';
-import { createLLMClient } from './api';
+import { createProvider } from './providers';
 import { getNodeScrollHeight, generateId, truncateText } from './utils';
 import { BranchModal } from './branch-modal';
 import { buildBranchContext, buildContextFromChain, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findChildNodeIds, findNodeById, getNodeText } from './context';
@@ -190,11 +190,11 @@ export default class CanvasBranchExtension {
     // 并行请求所有方向
     await Promise.allSettled(
       branches.map(async ({ answerNode, messages }) => {
-        const client = createLLMClient(model, apiKey);
+        const provider = createProvider(model, apiKey);
         let fullText = '';
 
         try {
-          await client.streamChat(messages, (token: string) => {
+          await provider.streamChat(messages, (token: string) => {
             fullText += token;
             answerNode.setText(fullText);
             this.autoFitHeight(answerNode);
@@ -273,11 +273,11 @@ export default class CanvasBranchExtension {
     messages.push(...historyMessages);
 
     // 3. 流式请求
-    const client = createLLMClient(model, apiKey);
+    const provider = createProvider(model, apiKey);
     let fullText = '';
 
     try {
-      await client.streamChat(messages, (token: string) => {
+      await provider.streamChat(messages, (token: string) => {
         fullText += token;
         answerNode.setText(fullText);
         this.autoFitHeight(answerNode);
@@ -340,11 +340,11 @@ export default class CanvasBranchExtension {
     }
     messages.push({ role: 'user', content: sourceNode.text });
 
-    const client = createLLMClient(model, apiKey);
+    const provider = createProvider(model, apiKey);
     let fullText = '';
 
     try {
-      await client.streamChat(messages, (token: string) => {
+      await provider.streamChat(messages, (token: string) => {
         fullText += token;
         answerNode.setText(fullText);
         this.autoFitHeight(answerNode);

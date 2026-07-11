@@ -136,6 +136,22 @@ export interface ChatRequest {
   max_tokens?: number;
 }
 
+/** ChatProvider 接口：统一 LLM 调用抽象，P2 Provider 重构引入 */
+export interface ChatProvider {
+  /** 流式对话 */
+  streamChat(
+    messages: ChatMessage[],
+    onToken?: StreamCallback,
+    signal?: AbortSignal
+  ): Promise<string>;
+
+  /** 连通性测试 */
+  testConnection(): Promise<{ ok: boolean; models?: string[]; error?: string }>;
+}
+
+/** Provider 执行模式 */
+export type ProviderType = 'openai' | 'claude-cli';
+
 /** Provider 配置 */
 export interface ProviderConfig {
   /** Provider 名称（如 'deepseek', 'openai', 'custom'） */
@@ -193,6 +209,8 @@ export interface ModelConfig {
   temperature?: number;
   /** Max tokens（默认 4096） */
   maxTokens?: number;
+  /** Provider 执行模式：'openai' = OpenAI 兼容 HTTP API（默认），'claude-cli' = 本地 Claude Code CLI */
+  providerType?: ProviderType;
   /** 测试连接后拉取到的可用模型列表（运行时缓存，不持久化） */
   _availableModels?: string[];
 }

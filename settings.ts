@@ -11,7 +11,7 @@ import CanvasBranchChatPlugin from './main';
 import { PluginSettingTab, Setting, Notice } from 'obsidian';
 import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS } from './types';
 import { generateId } from './utils';
-import { LLMClient } from './api';
+import { OpenAIProvider } from './providers';
 
 // ============================================================
 // 默认设置
@@ -369,8 +369,8 @@ class SettingsTab extends PluginSettingTab {
               return;
             }
 
-            const client = new LLMClient(model, apiKey);
-            const result = await client.testConnection();
+            const provider = new OpenAIProvider(model, apiKey);
+            const result = await provider.testConnection();
 
             btn.setButtonText('🔌 测试连接');
             btn.setDisabled(false);
