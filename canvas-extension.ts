@@ -143,12 +143,13 @@ export default class CanvasBranchExtension {
           defaultModelId,
           (result) => {
             if (!result.confirmed) return;
-            // 如果用户在弹窗里勾选了其他节点，用勾选的；否则用多选的
-            this.doMerge(canvas, result.selectedNodeIds.length >= 2
-              ? result.selectedNodeIds
-              : selectedNodes.map(n => n.id),
-              result.prompt, result.modelId);
+            if (result.selectedNodeIds.length < 2) {
+              new Notice('请至少选择 2 个节点进行合并');
+              return;
+            }
+            this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
           },
+          selectedNodes.map(n => n.id),
         ).open();
       });
     });

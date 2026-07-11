@@ -25,6 +25,7 @@ export class MergeModal extends Modal {
   private canvas: CanvasRuntimeView;
   private currentNodeId: string;
   private checkedNodes: Set<string>;
+  private preselectedIds: Set<string>;
 
   constructor(
     app: App,
@@ -33,6 +34,7 @@ export class MergeModal extends Modal {
     models: ModelConfig[],
     defaultModelId: string,
     onSubmit: (result: MergeModalResult) => void,
+    preselectedNodeIds?: string[],
   ) {
     super(app);
     this.canvas = canvas;
@@ -40,7 +42,9 @@ export class MergeModal extends Modal {
     this.models = models;
     this.modelId = defaultModelId;
     this.onSubmit = onSubmit;
-    this.checkedNodes = new Set([currentNodeId]);
+    // 预选节点（多选入口传入）；否则默认只勾选当前节点
+    this.preselectedIds = new Set(preselectedNodeIds || [currentNodeId]);
+    this.checkedNodes = new Set(this.preselectedIds);
     this.result = { prompt: '', modelId: '', selectedNodeIds: [], confirmed: false };
   }
 
@@ -57,6 +61,7 @@ export class MergeModal extends Modal {
     const candidates = this.getCandidateNodes();
     for (const node of candidates) {
       const isCurrent = node.id === this.currentNodeId;
+      const isPreselected = this.preselectedIds.has(node.id);
       const role = getNodeRole(node);
       const text = getNodeText(node).trim();
       const preview = text.substring(0, 60).replace(/[#*>`\n]/g, ' ');
@@ -64,7 +69,7 @@ export class MergeModal extends Modal {
 
       const row = nodeList.createDiv({ cls: 'merge-node-row' });
       const checkbox = row.createEl('input', { type: 'checkbox' });
-      checkbox.checked = isCurrent;
+      checkbox.checked = isPreselected;
       checkbox.disabled = isCurrent; // 当前节点固定勾选
       checkbox.addEventListener('change', () => {
         if (checkbox.checked) {
