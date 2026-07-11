@@ -166,6 +166,7 @@ export default class CanvasBranchExtension {
     const skills = this.plugin.skillScanner.getSkills();
     const models = this.plugin.settings.getModels();
     const defaultModelId = this.plugin.settings.getDefaultModel()?.id || '';
+    const frameworks = this.plugin.settings.getFrameworks();
 
     new BranchModal(
       this.plugin.app,
@@ -177,6 +178,7 @@ export default class CanvasBranchExtension {
       skills,
       models,
       defaultModelId,
+      frameworks,
     ).open();
   }
 

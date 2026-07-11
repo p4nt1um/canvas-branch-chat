@@ -9,7 +9,7 @@
  */
 
 import { App, Modal, Setting, ButtonComponent } from 'obsidian';
-import { BranchTemplate, DEFAULT_BRANCH_TEMPLATES, SkillInfo, ModelConfig } from './types';
+import { BranchTemplate, DEFAULT_BRANCH_TEMPLATES, SkillInfo, ModelConfig, BranchFramework } from './types';
 import { SkillSuggestModal } from './skill-suggest-modal';
 
 /** 单个方向的完整描述（文本 + 模型） */
@@ -35,6 +35,7 @@ export class BranchModal extends Modal {
   private skills: SkillInfo[];
   private models: ModelConfig[];
   private globalModelId: string;
+  private frameworks: BranchFramework[];
 
   constructor(
     app: App,
@@ -43,6 +44,7 @@ export class BranchModal extends Modal {
     skills?: SkillInfo[],
     models?: ModelConfig[],
     defaultModelId?: string,
+    frameworks?: BranchFramework[],
   ) {
     super(app);
     this.onSubmit = onSubmit;
@@ -52,6 +54,7 @@ export class BranchModal extends Modal {
     this.models = models || [];
     this.globalModelId = defaultModelId || this.models[0]?.id || '';
     this.directionModelIds = [this.globalModelId];
+    this.frameworks = frameworks || [];
   }
 
   onOpen() {
@@ -75,6 +78,11 @@ export class BranchModal extends Modal {
 
     // 快捷模板
     this.renderTemplates();
+
+    // P2 #16: 框架预设下拉
+    if (this.frameworks.length > 0) {
+      this.renderFrameworkSelector();
+    }
 
     // Skills 选择
     if (this.skills.length > 0) {
@@ -211,6 +219,58 @@ export class BranchModal extends Modal {
         this.insertTemplate(tpl.text);
       });
     }
+  }
+
+  /** P2 #16: 框架预设下拉 */
+  private renderFrameworkSelector() {
+    const { contentEl } = this;
+    new Setting(contentEl)
+      .setName('📋 框架预设')
+      .setDesc('选择框架批量填充方向')
+      .addDropdown((dropdown) => {
+        dropdown.addOption('', '— 选择框架 —');
+        for (const fw of this.frameworks) {
+          dropdown.addOption(fw.id, `${fw.icon || '📋'} ${fw.name}（${fw.directions.length}）${fw.description}`);
+        }
+        dropdown.onChange((value) => {
+          if (!value) return;
+          const fw = this.frameworks.find(f => f.id === value);
+          if (!fw) return;
+          this.applyFramework(fw);
+          dropdown.setValue(''); // 重置回占位符
+        });
+      });
+  }
+
+  /** P2 #16: 应用框架到方向列表 */
+  private applyFramework(fw: BranchFramework) {
+    // 检查是否有手输内容
+    const hasContent = this.directionTexts.some(t => t.trim().length > 0);
+    if (hasContent) {
+      // 简单确认：用 Notice 提示后替换
+      const confirmEl = this.contentEl.createDiv({ cls: 'branch-framework-confirm' });
+      confirmEl.createEl('p', { text: `将用「${fw.name}」替换当前 ${this.directionTexts.length} 个方向，确认？` });
+      const btnRow = confirmEl.createDiv({ cls: 'branch-framework-confirm-buttons' });
+      btnRow.createEl('button', { text: '确认替换' }).addEventListener('click', () => {
+        confirmEl.remove();
+        this.setDirections(fw.directions);
+      });
+      btnRow.createEl('button', { text: '取消' }).addEventListener('click', () => {
+        confirmEl.remove();
+      });
+      return;
+    }
+    this.setDirections(fw.directions);
+  }
+
+  /** 设置方向列表 */
+  private setDirections(directions: string[]) {
+    this.directionTexts = [...directions];
+    while (this.directionModelIds.length < this.directionTexts.length) {
+      this.directionModelIds.push(this.globalModelId);
+    }
+    this.directionModelIds.length = this.directionTexts.length;
+    this.renderDirections();
   }
 
   /** P2 #21: Skills 选择器 */

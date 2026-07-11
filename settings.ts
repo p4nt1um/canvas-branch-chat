@@ -9,7 +9,7 @@
 
 import CanvasBranchChatPlugin from './main';
 import { PluginSettingTab, Setting, Notice } from 'obsidian';
-import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS } from './types';
+import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS, BranchFramework, DEFAULT_FRAMEWORKS } from './types';
 import { generateId } from './utils';
 import { OpenAIProvider } from './providers';
 
@@ -38,6 +38,8 @@ export const DEFAULT_SETTINGS_V2: PluginSettingsV2 = {
   models: [createDefaultModel()],
   defaultModelId: '',
   customInstructions: '',
+  branchTemplates: undefined,
+  frameworks: undefined,
 };
 
 // ============================================================
@@ -151,6 +153,11 @@ export default class SettingsManager {
 
   getSettings(): PluginSettingsV2 {
     return this.settings;
+  }
+
+  /** P2 #16: 获取框架列表（用户自定义优先，否则内置默认） */
+  getFrameworks(): BranchFramework[] {
+    return this.settings.frameworks || DEFAULT_FRAMEWORKS;
   }
 
   async setSettings(data: Partial<PluginSettingsV2>) {
