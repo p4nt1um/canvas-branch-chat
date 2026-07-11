@@ -180,7 +180,10 @@ export function setNodeMetadata(node: CanvasRuntimeNode, metadata: Record<string
 // ============================================================
 
 /**
- * 从指定节点向上遍历直系祖先链，返回节点 ID 列表（从根到当前）
+ * 从指定节点向上遍历所有可达祖先（多父 DAG 感知），返回节点 ID 列表（从根到当前）
+ *
+ * P2 #13 修复：原版只走单条父链，多入边节点丢失上下文。
+ * 现在用 DFS 收集所有可达祖先，再按 y 坐标排序（对话从上到下）。
  *
  * 防御：
  * - 环检测（visited 集合）
@@ -191,17 +194,33 @@ export function getAncestorChain(
   startNodeId: string,
   maxDepth: number = 50
 ): string[] {
-  const chain: string[] = [];
   const visited = new Set<string>();
-  let currentId: string | null = startNodeId;
+  const collected: { id: string; y: number }[] = [];
 
-  while (currentId && !visited.has(currentId) && chain.length < maxDepth) {
-    visited.add(currentId);
-    chain.unshift(currentId); // 从前往后是 root → start
-    currentId = findParentNodeId(canvas, currentId);
-  }
+  const collect = (nodeId: string) => {
+    if (visited.has(nodeId) || collected.length >= maxDepth) return;
+    visited.add(nodeId);
 
-  return chain;
+    const node = findNodeById(canvas, nodeId);
+    if (!node) return;
+
+    collected.push({ id: nodeId, y: node.y });
+
+    // 遍历所有入边的父节点（多父感知）
+    const data = canvas.getData();
+    for (const edge of data.edges) {
+      if (edge.toNode === nodeId) {
+        collect(edge.fromNode);
+      }
+    }
+  };
+
+  collect(startNodeId);
+
+  // 按 y 坐标排序（从上到下 = 时间顺序）
+  collected.sort((a, b) => a.y - b.y);
+
+  return collected.map(c => c.id);
 }
 
 // ============================================================
