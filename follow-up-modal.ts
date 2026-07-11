@@ -131,48 +131,56 @@ export class FollowUpModal extends Modal {
     this.extracting = false;
   }
 
-  /** 正则提取：从最近 AI 节点的回答中匹配标题/要点 */
+  /** 正则提取：从右键节点（如果是 AI）或最近的 AI 祖先提取要点 */
   private extractByRegex(): string[] {
     const chain = getAncestorChain(this.canvas, this.sourceNode.id);
     const questions: string[] = [];
 
-    // 取最近 3 个 assistant 节点的文本
-    let assistantCount = 0;
-    for (let i = chain.length - 1; i >= 0 && assistantCount < 3; i--) {
-      const node = findNodeById(this.canvas, chain[i]);
-      if (!node) continue;
-      if (getNodeRole(node) !== 'assistant') continue;
-      assistantCount++;
+    // 优先取右键节点本身（如果是 AI），否则取最近的 1 个 AI 祖先
+    const sourceRole = getNodeRole(this.sourceNode);
+    let targetNode: CanvasRuntimeNode | null = null;
 
-      const text = getNodeText(node);
-      if (!text) continue;
-
-      // 匹配 ### 标题
-      const h3Matches = text.match(/^###\s+.+$/gm) || [];
-      for (const m of h3Matches) {
-        const q = m.replace(/^###\s+/, '').trim();
-        if (q && q.length > 2 && q.length < 100) {
-          // 转为追问句式
-          questions.push(this.toQuestion(q));
+    if (sourceRole === 'assistant') {
+      // 右键在 AI 节点上，直接用它
+      targetNode = this.sourceNode;
+    } else {
+      // 右键在 user/其他节点上，找最近的 AI 祖先
+      for (let i = chain.length - 1; i >= 0 && !targetNode; i--) {
+        const node = findNodeById(this.canvas, chain[i]);
+        if (node && getNodeRole(node) === 'assistant' && node.id !== this.sourceNode.id) {
+          targetNode = node;
         }
       }
+    }
 
-      // 匹配数字列表 1. / 2. / 等
-      const numMatches = text.match(/^\d+[.)、]\s+.+$/gm) || [];
-      for (const m of numMatches) {
-        const q = m.replace(/^\d+[.)、]\s+/, '').trim();
-        if (q && q.length > 2 && q.length < 100) {
-          questions.push(this.toQuestion(q));
-        }
+    if (!targetNode) return [];
+    const text = getNodeText(targetNode);
+    if (!text) return [];
+
+    // 匹配 ### 标题
+    const h3Matches = text.match(/^###\s+.+$/gm) || [];
+    for (const m of h3Matches) {
+      const q = m.replace(/^###\s+/, '').trim();
+      if (q && q.length > 2 && q.length < 100) {
+        questions.push(this.toQuestion(q));
       }
+    }
 
-      // 匹配 - bullet points
-      const bulletMatches = text.match(/^[-•]\s+.+$/gm) || [];
-      for (const m of bulletMatches) {
-        const q = m.replace(/^[-•]\s+/, '').trim();
-        if (q && q.length > 2 && q.length < 100) {
-          questions.push(this.toQuestion(q));
-        }
+    // 匹配数字列表 1. / 2. / 等
+    const numMatches = text.match(/^\d+[.)、]\s+.+$/gm) || [];
+    for (const m of numMatches) {
+      const q = m.replace(/^\d+[.)、]\s+/, '').trim();
+      if (q && q.length > 2 && q.length < 100) {
+        questions.push(this.toQuestion(q));
+      }
+    }
+
+    // 匹配 - bullet points
+    const bulletMatches = text.match(/^[-•]\s+.+$/gm) || [];
+    for (const m of bulletMatches) {
+      const q = m.replace(/^[-•]\s+/, '').trim();
+      if (q && q.length > 2 && q.length < 100) {
+        questions.push(this.toQuestion(q));
       }
     }
 
