@@ -303,6 +303,8 @@ export default class CanvasBranchExtension {
 
     new FollowUpModal(
       this.plugin.app,
+      canvas,
+      sourceNode,
       models,
       defaultModelId,
       async (result) => {
@@ -320,78 +322,99 @@ export default class CanvasBranchExtension {
           return;
         }
 
-        const customInstructions = this.plugin.settings.getSettings().customInstructions;
+        // P2 #22: 合并输入框 + 候选问题（去重）
+        const allQuestions: string[] = [];
+        if (result.prompt.trim()) allQuestions.push(result.prompt.trim());
+        for (const c of result.candidates) {
+          const trimmed = c.trim();
+          if (trimmed && !allQuestions.includes(trimmed)) allQuestions.push(trimmed);
+        }
 
-        // 继承分支颜色
+        if (allQuestions.length === 0) return;
+
+        const customInstructions = this.plugin.settings.getSettings().customInstructions;
         const branchColor = (sourceNode.getData() as any)?.chatBranchColor;
 
-        // 1. 创建 user 节点（自动带 chatRole + edge）
-        const userNode = canvas.createTextNode({
-          pos: {
-            x: sourceNode.x,
-            y: sourceNode.y + sourceNode.height + 50,
-          },
-          text: result.prompt,
-          size: { width: sourceNode.width, height: 120 },
-          focus: false,
-        });
-        setNodeRole(userNode, 'user');
-        if (branchColor) {
-          setNodeMetadata(userNode, { chatBranchColor: branchColor });
-        }
-        this.addEdge(canvas, sourceNode.id, userNode.id, 'bottom', 'top', undefined, branchColor);
+        // P2 #22: 多问题时，从源节点横向排列；单问题时纵向排列
+        const isMulti = allQuestions.length > 1;
+        const offsetX = sourceNode.width + 60;
 
-        // 2. 创建 AI 回答节点
-        const answerNode = canvas.createTextNode({
-          pos: {
-            x: userNode.x,
-            y: userNode.y + 120 + 50,
-          },
-          text: '思考中...',
-          size: { width: sourceNode.width, height: sourceNode.height },
-          focus: false,
-        });
-        setNodeRole(answerNode, 'assistant');
-        setNodeColor(answerNode, model.color || '#4A90D9');
-        setNodeMetadata(answerNode, { modelConfigId: model.id });
-        if (branchColor) {
-          setNodeMetadata(answerNode, { chatBranchColor: branchColor });
-        }
-        this.addEdge(canvas, userNode.id, answerNode.id, 'bottom', 'top', undefined, branchColor);
+        // 并行创建所有 user+AI 节点对
+        const promises = allQuestions.map(async (question, idx) => {
+          const xPos = isMulti
+            ? sourceNode.x + idx * offsetX
+            : sourceNode.x;
 
-        // 3. 构建上下文（从 user 节点向上遍历，含完整祖先链）
-        // P2 #15: 分级压缩
-        const chain = getAncestorChain(canvas, userNode.id);
-        const historyMessages = buildContextFromChain(
-          canvas,
-          chain,
-          this.plugin.settings.getContextRecentFull(),
-          this.plugin.settings.getContextTruncateChars(),
-        );
-
-        const messages: ChatMessage[] = [];
-        const sysPrompt = this.buildSystemPrompt(model.systemPrompt || customInstructions);
-        if (sysPrompt) {
-          messages.push({ role: 'system', content: sysPrompt });
-        }
-        messages.push(...historyMessages);
-
-        // 4. 流式请求
-        const provider = createProvider(model, apiKey);
-        let fullText = '';
-
-        try {
-          await provider.streamChat(messages, (token: string) => {
-            fullText += token;
-            answerNode.setText(fullText);
-            this.autoFitHeight(answerNode);
+          // 1. 创建 user 节点
+          const userNode = canvas.createTextNode({
+            pos: {
+              x: xPos,
+              y: sourceNode.y + sourceNode.height + 50,
+            },
+            text: question,
+            size: { width: sourceNode.width, height: 120 },
+            focus: false,
           });
-          this.setNodeSummary(answerNode, fullText, model);
-        } catch (error) {
-          console.error('Branch Chat: follow-up API error', error);
-          answerNode.setText(`❌ 请求失败: ${error}`);
-        }
+          setNodeRole(userNode, 'user');
+          if (branchColor) {
+            setNodeMetadata(userNode, { chatBranchColor: branchColor });
+          }
+          this.addEdge(canvas, sourceNode.id, userNode.id, 'bottom', 'top', undefined, branchColor);
 
+          // 2. 创建 AI 回答节点
+          const answerNode = canvas.createTextNode({
+            pos: {
+              x: xPos,
+              y: userNode.y + 120 + 50,
+            },
+            text: '思考中...',
+            size: { width: sourceNode.width, height: sourceNode.height },
+            focus: false,
+          });
+          setNodeRole(answerNode, 'assistant');
+          setNodeColor(answerNode, model.color || '#4A90D9');
+          setNodeMetadata(answerNode, { modelConfigId: model.id });
+          if (branchColor) {
+            setNodeMetadata(answerNode, { chatBranchColor: branchColor });
+          }
+          this.addEdge(canvas, userNode.id, answerNode.id, 'bottom', 'top', undefined, branchColor);
+
+          // 3. 构建上下文（从 user 节点向上遍历）
+          // P2 #15: 分级压缩
+          const chain = getAncestorChain(canvas, userNode.id);
+          const historyMessages = buildContextFromChain(
+            canvas,
+            chain,
+            this.plugin.settings.getContextRecentFull(),
+            this.plugin.settings.getContextTruncateChars(),
+          );
+
+          const messages: ChatMessage[] = [];
+          const sysPrompt = this.buildSystemPrompt(model.systemPrompt || customInstructions);
+          if (sysPrompt) {
+            messages.push({ role: 'system', content: sysPrompt });
+          }
+          messages.push(...historyMessages);
+
+          // 4. 流式请求
+          const provider = createProvider(model, apiKey);
+          let fullText = '';
+
+          try {
+            await provider.streamChat(messages, (token: string) => {
+              fullText += token;
+              answerNode.setText(fullText);
+              this.autoFitHeight(answerNode);
+            });
+            this.setNodeSummary(answerNode, fullText, model);
+          } catch (error) {
+            console.error('Branch Chat: follow-up API error', error);
+            answerNode.setText(`❌ 请求失败: ${error}`);
+          }
+        });
+
+        // 等待所有请求完成
+        await Promise.all(promises);
         canvas.requestSave();
       },
     ).open();
