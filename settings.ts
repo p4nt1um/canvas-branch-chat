@@ -40,6 +40,9 @@ export const DEFAULT_SETTINGS_V2: PluginSettingsV2 = {
   customInstructions: '',
   branchTemplates: undefined,
   frameworks: undefined,
+  contextRecentFull: 3,
+  contextTruncateChars: 500,
+  summaryGuidance: true,
 };
 
 // ============================================================
@@ -160,6 +163,21 @@ export default class SettingsManager {
     return this.settings.frameworks || DEFAULT_FRAMEWORKS;
   }
 
+  /** P2 #15: 最近 N 个 assistant 节点发全文 */
+  getContextRecentFull(): number {
+    return this.settings.contextRecentFull ?? 3;
+  }
+
+  /** P2 #15: 更远节点截取前 M 字 */
+  getContextTruncateChars(): number {
+    return this.settings.contextTruncateChars ?? 500;
+  }
+
+  /** P2 #15: 摘要引导开关 */
+  getSummaryGuidance(): boolean {
+    return this.settings.summaryGuidance ?? true;
+  }
+
   async setSettings(data: Partial<PluginSettingsV2>) {
     Object.assign(this.settings, data);
     await this.saveSettings();
@@ -266,6 +284,46 @@ class SettingsTab extends PluginSettingTab {
         return text.onChange(async (value) => {
           await this.manager.setSettings({ customInstructions: value });
         });
+      });
+
+    // P2 #15: 上下文分级压缩设置
+    containerEl.createEl('h3', { text: '📋 上下文压缩' });
+
+    new Setting(containerEl)
+      .setName('最近 N 个节点发全文')
+      .setDesc('最近的 N 个 AI 回答发送全文，更远的截取摘要。user 节点始终全文。')
+      .addSlider((slider) => {
+        slider
+          .setLimits(1, 10, 1)
+          .setValue(this.manager.getContextRecentFull())
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            await this.manager.setSettings({ contextRecentFull: value });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('远端节点截取字数')
+      .setDesc('超过 N 个的 AI 回答截取前 M 字发送')
+      .addSlider((slider) => {
+        slider
+          .setLimits(100, 2000, 100)
+          .setValue(this.manager.getContextTruncateChars())
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            await this.manager.setSettings({ contextTruncateChars: value });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('金字塔摘要引导')
+      .setDesc('在 system prompt 中引导 AI 先概括再展开，配合截取不丢信息')
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.manager.getSummaryGuidance())
+          .onChange(async (value) => {
+            await this.manager.setSettings({ summaryGuidance: value });
+          });
       });
   }
 

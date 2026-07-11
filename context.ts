@@ -233,14 +233,24 @@ export function getAncestorChain(
  * 角色推断优先级：
  * 1. 节点元数据 chatRole（准确，创建时写入）
  * 2. 奇偶交替 fallback（兼容无元数据的老节点）
+ *
+ * P2 #15: 分级压缩
+ * - user 节点：永远发全文
+ * - assistant 节点：最近 N 个发全文，更远截取前 M 字
+ * - N 和 M 由设置控制
  */
 export function buildContextFromChain(
   canvas: CanvasRuntimeView,
-  chainNodeIds: string[]
+  chainNodeIds: string[],
+  recentFullCount: number = 3,
+  truncateChars: number = 500,
 ): ChatMessage[] {
   const messages: ChatMessage[] = [];
 
-  for (let i = 0; i < chainNodeIds.length; i++) {
+  // 从尾部（最近）往前数 assistant 节点
+  let assistantSeen = 0;
+
+  for (let i = chainNodeIds.length - 1; i >= 0; i--) {
     const node = findNodeById(canvas, chainNodeIds[i]);
     if (!node) continue;
 
@@ -248,22 +258,29 @@ export function buildContextFromChain(
     if (!text) continue;
     if (text === 'Loading...' || text === '思考中...') continue;
 
-    // 从元数据读取角色（纯元数据驱动，无 fallback）
+    // 从元数据读取角色
     const metaRole = getNodeRole(node);
     if (metaRole !== 'user' && metaRole !== 'assistant') {
-      // 未标记角色的节点跳过（不参与上下文）
+      // 未标记角色的节点跳过
       continue;
     }
 
     // 清理 assistant 节点中可能存在的模型标注前缀
-    // 前缀格式: "> 🤖 **模型别名**\n\n"
     let cleanText = text;
     if (metaRole === 'assistant') {
-      cleanText = cleanText.replace(/^>\s*[^\n]*\*\*[^\n]*\*\*\s*\n\n/, '').trim();
+      cleanText = cleanText.replace(/^>\s*[^\n]*\**[^\n]*\*\*\s*\n\n/, '').trim();
+      assistantSeen++;
+      // P2 #15: 超过最近 N 个的 assistant 节点截取前 M 字
+      if (assistantSeen > recentFullCount && cleanText.length > truncateChars) {
+        cleanText = cleanText.substring(0, truncateChars) + '\n\n[... 已截取 ...]';
+      }
     }
 
     messages.push({ role: metaRole, content: cleanText });
   }
+
+  // messages 是倒序的，反转为正序（从根到当前）
+  messages.reverse();
 
   return messages;
 }
@@ -280,7 +297,9 @@ export function buildBranchContext(
   canvas: CanvasRuntimeView,
   sourceNodeId: string,
   branchDirection: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  recentFullCount?: number,
+  truncateChars?: number,
 ): ChatMessage[] {
   const messages: ChatMessage[] = [];
 
@@ -289,9 +308,9 @@ export function buildBranchContext(
     messages.push({ role: 'system', content: systemPrompt });
   }
 
-  // 2. 祖先链对话历史
+  // 2. 祖先链对话历史（P2 #15: 分级压缩）
   const chain = getAncestorChain(canvas, sourceNodeId);
-  const historyMessages = buildContextFromChain(canvas, chain);
+  const historyMessages = buildContextFromChain(canvas, chain, recentFullCount, truncateChars);
   messages.push(...historyMessages);
 
   // 3. 分支方向作为最后的 user 消息（而不是 system）

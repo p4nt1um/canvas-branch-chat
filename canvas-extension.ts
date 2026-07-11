@@ -53,6 +53,14 @@ export default class CanvasBranchExtension {
   // 模型获取工具
   // ============================================================
 
+  /** P2 #15: 在 system prompt 中注入金字塔摘要引导 */
+  private buildSystemPrompt(basePrompt?: string): string {
+    const guidance = this.plugin.settings.getSummaryGuidance();
+    const suffix = '\n\n请在回答开头用 2-3 句话概括核心结论，然后再展开详细说明。';
+    if (!basePrompt) return guidance ? suffix.trim() : '';
+    return guidance ? basePrompt + suffix : basePrompt;
+  }
+
   /** 获取默认模型 + API Key，失败返回 null 并提示 */
   private getModelAndKey(): { model: ModelConfig; apiKey: string } | null {
     const model = this.plugin.settings.getDefaultModel();
@@ -230,7 +238,7 @@ export default class CanvasBranchExtension {
       const skillTag = parseSkillTag(dir.text);
       const effectiveDirection = skillTag ? skillTag.direction : dir.text;
       const edgeLabel = effectiveDirection; // 边标签不含 skill 前缀
-      let effectiveSystemPrompt = model.systemPrompt || customInstructions;
+      let effectiveSystemPrompt = this.buildSystemPrompt(model.systemPrompt || customInstructions);
 
       if (skillTag) {
         const skill = this.plugin.skillScanner.getSkill(skillTag.skillName);
@@ -246,6 +254,8 @@ export default class CanvasBranchExtension {
         sourceNode.id,
         effectiveDirection,
         effectiveSystemPrompt,
+        this.plugin.settings.getContextRecentFull(),
+        this.plugin.settings.getContextTruncateChars(),
       );
 
       return { answerNode, messages, model, apiKey };
@@ -349,12 +359,18 @@ export default class CanvasBranchExtension {
         }
         this.addEdge(canvas, userNode.id, answerNode.id, 'bottom', 'top', undefined, branchColor);
 
-        // 3. 构建上下文（从 user 节点向上遍历，包含完整祖先链）
+        // 3. 构建上下文（从 user 节点向上遍历，含完整祖先链）
+        // P2 #15: 分级压缩
         const chain = getAncestorChain(canvas, userNode.id);
-        const historyMessages = buildContextFromChain(canvas, chain);
+        const historyMessages = buildContextFromChain(
+          canvas,
+          chain,
+          this.plugin.settings.getContextRecentFull(),
+          this.plugin.settings.getContextTruncateChars(),
+        );
 
         const messages: ChatMessage[] = [];
-        const sysPrompt = model.systemPrompt || customInstructions;
+        const sysPrompt = this.buildSystemPrompt(model.systemPrompt || customInstructions);
         if (sysPrompt) {
           messages.push({ role: 'system', content: sysPrompt });
         }
@@ -423,7 +439,7 @@ export default class CanvasBranchExtension {
     this.addEdge(canvas, sourceNode.id, answerNode.id, 'bottom', 'top');
 
     const messages: ChatMessage[] = [];
-    const sysPrompt = model.systemPrompt || customInstructions;
+    const sysPrompt = this.buildSystemPrompt(model.systemPrompt || customInstructions);
     if (sysPrompt) {
       messages.push({ role: 'system', content: sysPrompt });
     }
@@ -612,7 +628,7 @@ export default class CanvasBranchExtension {
     }
 
     // 构建合并上下文
-    const systemPrompt = model.systemPrompt || customInstructions;
+    const systemPrompt = this.buildSystemPrompt(model.systemPrompt || customInstructions);
     const messages = buildMergeContext(
       canvas,
       sourceNodeIds,

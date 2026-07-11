@@ -306,6 +306,12 @@ export interface PluginSettingsV2 {
   branchTemplates?: BranchTemplate[];
   /** P2 #16: 用户自定义分叉框架预设（undefined = 使用内置默认） */
   frameworks?: BranchFramework[];
+  /** P2 #15: 最近 N 个 assistant 节点发全文 */
+  contextRecentFull?: number;
+  /** P2 #15: 更远的节点截取前 M 字 */
+  contextTruncateChars?: number;
+  /** P2 #15: system prompt 摘要引导开关 */
+  summaryGuidance?: boolean;
 }
 
 /** Provider 默认配置 */
