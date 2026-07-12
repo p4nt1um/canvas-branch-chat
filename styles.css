@@ -273,9 +273,9 @@
 .replay-bar-speed-drop {
   display: none;
   position: absolute;
-  bottom: 100%;
+  top: 100%;
   left: 0;
-  margin-bottom: 4px;
+  margin-top: 4px;
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;

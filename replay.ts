@@ -16,7 +16,7 @@ import { findChildNodeIds, findNodeById, getNodeRole, findParentNodeId, getNodeC
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCanvas = CanvasRuntimeView & Record<string, any>;
 
-type TraversalMode = 'time' | 'depth';
+type TraversalMode = 'time' | 'depth' | 'breadth';
 
 interface SpeedPreset {
   label: string;
@@ -213,6 +213,42 @@ function traverseDepth(canvas: AnyCanvas, rootId: string): string[] {
   return result;
 }
 
+/** 广度优先：按层级遍历，同层内按 createdAt(或 x) 排序 */
+function traverseBreadth(canvas: AnyCanvas, rootId: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  let queue = [rootId];
+
+  while (queue.length > 0) {
+    const nextQueue: string[] = [];
+    const levelItems: { id: string; createdAt: number | null; x: number }[] = [];
+
+    for (const id of queue) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const node = findNodeById(canvas, id);
+      if (!node) continue;
+      const role = getNodeRole(node);
+      if (role === 'user' || role === 'assistant') {
+        levelItems.push({ id, createdAt: getNodeCreatedAt(node), x: node.x });
+      }
+      for (const child of findChildNodeIds(canvas, id)) {
+        if (!seen.has(child)) nextQueue.push(child);
+      }
+    }
+
+    // 同层排序：优先 createdAt，fallback x
+    levelItems.sort((a, b) => {
+      if (a.createdAt !== null && b.createdAt !== null) return a.createdAt - b.createdAt;
+      return a.x - b.x;
+    });
+    result.push(...levelItems.map(i => i.id));
+    queue = nextQueue;
+  }
+
+  return result;
+}
+
 // ============================================================
 // 控制条
 // ============================================================
@@ -260,6 +296,10 @@ function createControlBar(total: number, cb: {
   modeT.textContent = 'T 时间线';
   onBtn(modeT, () => cb.onMode('time'));
 
+  const modeB = mid.createEl('button', { cls: 'replay-bar-mode' });
+  modeB.textContent = 'B 广度优先';
+  onBtn(modeB, () => cb.onMode('breadth'));
+
   const modeD = mid.createEl('button', { cls: 'replay-bar-mode' });
   modeD.textContent = 'D 深度优先';
   onBtn(modeD, () => cb.onMode('depth'));
@@ -300,6 +340,7 @@ function createControlBar(total: number, cb: {
     setPaused: (paused) => { playBtn.innerHTML = paused ? '▶' : '⏸'; },
     setMode: (mode) => {
       modeT.toggleClass('replay-bar-mode-active', mode === 'time');
+      modeB.toggleClass('replay-bar-mode-active', mode === 'breadth');
       modeD.toggleClass('replay-bar-mode-active', mode === 'depth');
     },
     destroy: () => {
@@ -467,9 +508,13 @@ export class ReplayController {
 
   private rebuild(): void {
     const root = findRootId(this.canvas, this.startNodeId);
-    this.nodeIds = this.mode === 'time'
-      ? traverseTime(this.canvas, root)
-      : traverseDepth(this.canvas, root);
+    if (this.mode === 'time') {
+      this.nodeIds = traverseTime(this.canvas, root);
+    } else if (this.mode === 'breadth') {
+      this.nodeIds = traverseBreadth(this.canvas, root);
+    } else {
+      this.nodeIds = traverseDepth(this.canvas, root);
+    }
   }
 
   // ── 延迟 ──
@@ -509,6 +554,10 @@ export class ReplayController {
         case 'ArrowRight':
           e.preventDefault(); e.stopPropagation();
           this.next();
+          break;
+        case 'b':
+        case 'B':
+          this.changeMode('breadth');
           break;
         case 't': case 'T':
           this.changeMode('time');
