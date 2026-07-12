@@ -122,9 +122,10 @@ function calcOverview(canvas: CanvasRuntimeView, nodeIds: string[]): Viewport {
 
   console.log(`[Canvas Branch Chat] calcOverview: tree=${Math.round(treeW)}x${Math.round(treeH)}, view=${Math.round(w)}x${Math.round(h)}, zoom=${zoom.toFixed(3)}`);
 
+  // Obsidian Canvas viewport: x/y 是视口中心的画布坐标
   return {
-    x: cx - w / (2 * zoom),
-    y: cy - h / (2 * zoom),
+    x: cx,
+    y: cy,
     zoom,
   };
 }
@@ -138,9 +139,10 @@ function calcFocus(node: CanvasRuntimeNode): Viewport {
   // 节点占视口 70%
   const zoom = Math.min((w * 0.7) / nw, (h * 0.7) / nh, 2.5);
 
+  // Obsidian Canvas viewport: x/y 是视口中心 = 节点中心
   return {
-    x: node.x + nw / 2 - w / (2 * zoom),
-    y: node.y + nh / 2 - h / (2 * zoom),
+    x: node.x + nw / 2,
+    y: node.y + nh / 2,
     zoom,
   };
 }
