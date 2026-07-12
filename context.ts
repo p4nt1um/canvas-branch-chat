@@ -139,12 +139,32 @@ export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'br
 }
 
 /**
+ * P2 #14: 获取节点创建时间戳
+ * fallback: null（旧节点可能没有）
+ */
+export function getNodeCreatedAt(node: CanvasRuntimeNode): number | null {
+  try {
+    const canvas = node.canvas;
+    if (canvas) {
+      const canvasData = canvas.getData();
+      const nodeData = canvasData.nodes.find((n: CanvasTextData) => n.id === node.id) as ChatNodeData | undefined;
+      if (nodeData?.createdAt) return nodeData.createdAt;
+    }
+    const data = node.getData() as ChatNodeData;
+    return data?.createdAt ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 在节点上写入对话角色元数据
  *
  * 同时写入 canvas 数据层（持久化）和节点运行时
+ * P2 #14: 同时写入 createdAt 时间戳
  */
 export function setNodeRole(node: CanvasRuntimeNode, role: 'user' | 'assistant' | 'branch-point'): void {
-  setNodeMetadata(node, { chatRole: role });
+  setNodeMetadata(node, { chatRole: role, createdAt: Date.now() });
 }
 
 /**

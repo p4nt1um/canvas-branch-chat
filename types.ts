@@ -26,6 +26,8 @@ export interface ChatNodeData extends CanvasTextData {
   chatBranchColor?: string;
   /** P1 #10: 节点摘要标题 */
   chatSummary?: string;
+  /** P2 #14: 创建时间戳（用于回放排序） */
+  createdAt?: number;
 }
 
 // ============================================================

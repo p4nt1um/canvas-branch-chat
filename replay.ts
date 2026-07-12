@@ -11,7 +11,7 @@
 
 import { Notice } from 'obsidian';
 import { CanvasRuntimeNode, CanvasRuntimeView } from './types';
-import { findChildNodeIds, findNodeById, getNodeRole, findParentNodeId } from './context';
+import { findChildNodeIds, findNodeById, getNodeRole, findParentNodeId, getNodeCreatedAt } from './context';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyCanvas = CanvasRuntimeView & Record<string, any>;
@@ -158,41 +158,41 @@ function findRootId(canvas: AnyCanvas, startId: string): string {
 }
 
 function traverseTime(canvas: AnyCanvas, rootId: string): string[] {
-  // 时间线模式：按对话时间顺序（BFS 层序），同层内按 y 升序再按 x 升序
-  // y 升序 = 屏幕上方先出现；x 升序 = 从左到右
+  // 时间线模式：按真实创建时间排序
+  // 收集所有对话节点，按 createdAt 升序
+  // 旧节点没有 createdAt 时 fallback 到 BFS 层序 + y/x
   const seen = new Set<string>();
-  const result: string[] = [];
+  const items: { id: string; createdAt: number | null; y: number; x: number }[] = [];
 
-  // BFS 按层级遍历
-  let queue = [rootId];
-  while (queue.length > 0) {
-    const nextQueue: string[] = [];
-    const levelItems: { id: string; y: number; x: number }[] = [];
-
-    for (const id of queue) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const node = findNodeById(canvas, id);
-      if (!node) continue;
-
-      const role = getNodeRole(node);
-      if (role === 'user' || role === 'assistant') {
-        levelItems.push({ id, y: node.y, x: node.x });
-      }
-
-      for (const child of findChildNodeIds(canvas, id)) {
-        if (!seen.has(child)) nextQueue.push(child);
-      }
+  const walk = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const node = findNodeById(canvas, id);
+    if (!node) return;
+    const role = getNodeRole(node);
+    if (role === 'user' || role === 'assistant') {
+      items.push({
+        id,
+        createdAt: getNodeCreatedAt(node),
+        y: node.y,
+        x: node.x,
+      });
     }
+    for (const child of findChildNodeIds(canvas, id)) walk(child);
+  };
+  walk(rootId);
 
-    // 同层内排序：先 y（上到下）再 x（左到右）
-    levelItems.sort((a, b) => a.y - b.y || a.x - b.x);
-    result.push(...levelItems.map(i => i.id));
-
-    queue = nextQueue;
+  // 判断是否有足够多的节点带 createdAt
+  const withTimestamp = items.filter(i => i.createdAt !== null);
+  if (withTimestamp.length === items.length && items.length > 0) {
+    // 全部有createdAt — 直接按时间排序
+    items.sort((a, b) => (a.createdAt! - b.createdAt!));
+  } else {
+    // 部分或全部没有 createdAt（旧节点）— fallback 到 y 再 x
+    items.sort((a, b) => a.y - b.y || a.x - b.x);
   }
 
-  return result;
+  return items.map(i => i.id);
 }
 
 function traverseDepth(canvas: AnyCanvas, rootId: string): string[] {
