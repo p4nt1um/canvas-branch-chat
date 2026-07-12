@@ -204,6 +204,7 @@
   box-shadow: 0 4px 14px rgba(0,0,0,0.18);
   z-index: 100000;
   font-size: 13px;
+  pointer-events: auto;
 }
 
 .replay-bar-left,

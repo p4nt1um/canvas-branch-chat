@@ -158,22 +158,41 @@ function findRootId(canvas: AnyCanvas, startId: string): string {
 }
 
 function traverseTime(canvas: AnyCanvas, rootId: string): string[] {
+  // 时间线模式：按对话时间顺序（BFS 层序），同层内按 y 升序再按 x 升序
+  // y 升序 = 屏幕上方先出现；x 升序 = 从左到右
   const seen = new Set<string>();
-  const items: { id: string; y: number }[] = [];
-  const walk = (id: string) => {
-    if (seen.has(id)) return;
-    seen.add(id);
-    const node = findNodeById(canvas, id);
-    if (!node) return;
-    const role = getNodeRole(node);
-    if (role === 'user' || role === 'assistant') {
-      items.push({ id, y: node.y });
+  const result: string[] = [];
+
+  // BFS 按层级遍历
+  let queue = [rootId];
+  while (queue.length > 0) {
+    const nextQueue: string[] = [];
+    const levelItems: { id: string; y: number; x: number }[] = [];
+
+    for (const id of queue) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const node = findNodeById(canvas, id);
+      if (!node) continue;
+
+      const role = getNodeRole(node);
+      if (role === 'user' || role === 'assistant') {
+        levelItems.push({ id, y: node.y, x: node.x });
+      }
+
+      for (const child of findChildNodeIds(canvas, id)) {
+        if (!seen.has(child)) nextQueue.push(child);
+      }
     }
-    for (const child of findChildNodeIds(canvas, id)) walk(child);
-  };
-  walk(rootId);
-  items.sort((a, b) => a.y - b.y);
-  return items.map((i) => i.id);
+
+    // 同层内排序：先 y（上到下）再 x（左到右）
+    levelItems.sort((a, b) => a.y - b.y || a.x - b.x);
+    result.push(...levelItems.map(i => i.id));
+
+    queue = nextQueue;
+  }
+
+  return result;
 }
 
 function traverseDepth(canvas: AnyCanvas, rootId: string): string[] {
@@ -214,6 +233,12 @@ function createControlBar(total: number, cb: {
   onSpeed: (i: number) => void;
 }): ControlBar {
   const el = document.body.createDiv({ cls: 'replay-bar' });
+  el.style.pointerEvents = 'auto';
+
+  // helper: 用 pointerdown 替代 click，绕过 Canvas 事件捕获
+  const onBtn = (b: HTMLElement, fn: () => void) => {
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
+  };
 
   // 左：播放
   const left = el.createDiv({ cls: 'replay-bar-left' });
@@ -221,7 +246,7 @@ function createControlBar(total: number, cb: {
     const b = left.createEl('button', { cls: 'replay-bar-btn' });
     b.innerHTML = icon;
     b.title = title;
-    b.addEventListener('click', fn);
+    onBtn(b, fn);
     return b;
   };
   mkBtn('⏮', '上一个 (←)', cb.onPrev);
@@ -233,11 +258,11 @@ function createControlBar(total: number, cb: {
 
   const modeT = mid.createEl('button', { cls: 'replay-bar-mode replay-bar-mode-active' });
   modeT.textContent = 'T 时间线';
-  modeT.addEventListener('click', () => cb.onMode('time'));
+  onBtn(modeT, () => cb.onMode('time'));
 
   const modeD = mid.createEl('button', { cls: 'replay-bar-mode' });
   modeD.textContent = 'D 深度优先';
-  modeD.addEventListener('click', () => cb.onMode('depth'));
+  onBtn(modeD, () => cb.onMode('depth'));
 
   const speedWrap = mid.createDiv({ cls: 'replay-bar-speed-wrap' });
   const speedBtn = speedWrap.createEl('button', { cls: 'replay-bar-speed' });
@@ -246,20 +271,19 @@ function createControlBar(total: number, cb: {
   SPEEDS.forEach((s, i) => {
     const opt = speedDrop.createEl('button', { cls: 'replay-bar-speed-opt' });
     opt.textContent = s.label;
-    opt.addEventListener('click', () => {
+    onBtn(opt, () => {
       speedBtn.textContent = `⏱ ${s.label}`;
       cb.onSpeed(i);
       speedDrop.toggleClass('show', false);
     });
   });
-  speedBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
+  onBtn(speedBtn, () => {
     speedDrop.toggleClass('show', !speedDrop.hasClass('show'));
   });
-  const closeDrop = (e: MouseEvent) => {
+  const closeDrop = (e: PointerEvent) => {
     if (!speedWrap.contains(e.target as Node)) speedDrop.toggleClass('show', false);
   };
-  document.addEventListener('click', closeDrop);
+  document.addEventListener('pointerdown', closeDrop, true);
 
   // 右：进度 + 退出
   const right = el.createDiv({ cls: 'replay-bar-right' });
@@ -269,7 +293,7 @@ function createControlBar(total: number, cb: {
   const exitBtn = right.createEl('button', { cls: 'replay-bar-exit' });
   exitBtn.textContent = '✕ 退出';
   exitBtn.title = '退出回放 (Esc)';
-  exitBtn.addEventListener('click', cb.onExit);
+  onBtn(exitBtn, cb.onExit);
 
   return {
     setProgress: (cur, t) => { progress.textContent = `${cur + 1}/${t}`; },
@@ -279,7 +303,7 @@ function createControlBar(total: number, cb: {
       modeD.toggleClass('replay-bar-mode-active', mode === 'depth');
     },
     destroy: () => {
-      document.removeEventListener('click', closeDrop);
+      document.removeEventListener('pointerdown', closeDrop, true);
       el.remove();
     },
   };
