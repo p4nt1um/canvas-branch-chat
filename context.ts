@@ -125,13 +125,13 @@ export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'br
     const canvas = node.canvas;
     if (canvas) {
       const canvasData = canvas.getData();
-      const nodeData = canvasData.nodes.find((n: CanvasTextData) => n.id === node.id);
+      const nodeData = canvasData.nodes.find((n: CanvasTextData) => n.id === node.id) as ChatNodeData | undefined;
       if (nodeData && nodeData.chatRole) {
         return nodeData.chatRole;
       }
     }
     // 方式2：从节点 getData 读取
-    const data = node.getData() as ChatNodeData;
+    const data = node.getData() as Partial<ChatNodeData>;
     return data?.chatRole ?? null;
   } catch {
     return null;
@@ -193,7 +193,7 @@ export function setNodeMetadata(node: CanvasRuntimeNode, metadata: Record<string
     }
     // 同时写入节点运行时
     const data = node.getData();
-    node.setData({ ...data, ...metadata } as Partial<CanvasTextData>);
+    node.setData({ ...data, ...metadata });
   } catch {
     // 忽略
   }

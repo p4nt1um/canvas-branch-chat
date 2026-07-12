@@ -295,7 +295,6 @@ class SettingsTab extends PluginSettingTab {
         slider
           .setLimits(1, 10, 1)
           .setValue(this.manager.getContextRecentFull())
-          .setDynamicTooltip()
           .onChange((value) => {
             void this.manager.setSettings({ contextRecentFull: value });
           });
@@ -308,7 +307,6 @@ class SettingsTab extends PluginSettingTab {
         slider
           .setLimits(100, 2000, 100)
           .setValue(this.manager.getContextTruncateChars())
-          .setDynamicTooltip()
           .onChange((value) => {
             void this.manager.setSettings({ contextTruncateChars: value });
           });

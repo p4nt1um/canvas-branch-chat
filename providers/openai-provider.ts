@@ -48,8 +48,7 @@ export class OpenAIProvider implements ChatProvider {
     let fullText = '';
 
     try {
-      // eslint-disable-next-line no-restricted-globals -- fetch is available in Obsidian Electron environment
-      const response = await fetch(this.model.baseUrl, {
+      const response = await window.fetch(this.model.baseUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json;charset=utf-8',

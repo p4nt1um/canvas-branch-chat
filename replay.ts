@@ -61,12 +61,12 @@ function nativeZoomToFit(canvas: AnyCanvas): void {
 }
 
 function nativeZoomToBbox(canvas: AnyCanvas, bbox: BBox): void {
-  const fn = canvas.zoomToBbox;
+  const fn = canvas.zoomToBbox as (bbox: BBox) => void | undefined;
   if (typeof fn === 'function') fn.call(canvas, bbox);
 }
 
 function nativeGetViewportBBox(canvas: AnyCanvas): BBox | null {
-  const fn = canvas.getViewportBBox;
+  const fn = canvas.getViewportBBox as (() => BBox) | undefined;
   if (typeof fn === 'function') return fn.call(canvas);
   const getData = canvas.getData;
   if (typeof getData === 'function') {
@@ -102,8 +102,8 @@ function setHighlight(node: CanvasRuntimeNode, state: 'pending' | 'current' | 'p
 
 function clearAllStyles(canvas: AnyCanvas): void {
   const container = (canvas.canvasEl ?? canvas.containerEl ?? canvas.contentEl ?? canvas.el) as HTMLElement | undefined;
-  if (!container?.querySelectorAll) return;
-  const nodes = container.querySelectorAll('.canvas-node') as NodeListOf<HTMLElement>;
+  if (!container) return;
+  const nodes = container.findAll('.canvas-node');
   nodes.forEach((el) => {
     el.removeClass('replay-pending', 'replay-current', 'replay-played');
   });

@@ -104,7 +104,7 @@ function buildTree(canvas: CanvasRuntimeView, nodeId: string, visited: Set<strin
   return {
     nodeId,
     type: fileInfo.type,
-    role: role as 'user' | 'assistant' | 'branch-point' | 'unknown',
+    role,
     text,
     filePath: fileInfo.filePath,
     modelAlias,

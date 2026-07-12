@@ -132,8 +132,7 @@ export class MergeModal extends Modal {
 
   /** 获取候选节点：有内容的文本节点 */
   private getCandidateNodes(): CanvasRuntimeNode[] {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Canvas internal nodes map not typed
-    const internalCanvas = this.canvas as any;
+    const internalCanvas = this.canvas as unknown as { nodes?: Map<string, CanvasRuntimeNode> | Record<string, CanvasRuntimeNode>; _nodes?: Map<string, CanvasRuntimeNode> | Record<string, CanvasRuntimeNode> };
     const nodesMap = internalCanvas.nodes ?? internalCanvas._nodes;
     if (!nodesMap) return [];
 

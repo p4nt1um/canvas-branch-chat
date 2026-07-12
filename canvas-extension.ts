@@ -41,8 +41,9 @@ export default class CanvasBranchExtension {
     // P2 #13: 尝试注册多选菜单事件
     // Obsidian Canvas 内部可能有 'canvas:selection-menu' 事件
     this.plugin.registerEvent(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Obsidian Canvas internal API not fully typed
-      (this.plugin.app.workspace as any).on(
+      (this.plugin.app.workspace as unknown as {
+        on: (event: string, cb: (menu: Menu, canvas: CanvasRuntimeView) => void) => import('obsidian').EventRef
+      }).on(
         'canvas:selection-menu',
         ((menu: Menu, canvas: CanvasRuntimeView) => {
           this.onSelectionMenu(menu, canvas);
