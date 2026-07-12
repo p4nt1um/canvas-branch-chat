@@ -18,6 +18,7 @@ import { getNodeScrollHeight, generateId, truncateText } from './utils';
 import { BranchModal, BranchDirection } from './branch-modal';
 import { buildBranchContext, buildContextFromChain, buildMergeContext, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findNodeById } from './context';
 import { exportCanvasConversation } from './export';
+import { ReplayController } from './replay';
 import { parseSkillTag } from './skill-scanner';
 import { MergeModal } from './merge-modal';
 import { FollowUpModal } from './follow-up-modal';
@@ -123,6 +124,16 @@ export default class CanvasBranchExtension {
       item.setTitle('📥 导出对话树');
       item.setIcon('download');
       item.onClick(() => exportCanvasConversation(this.plugin.app, cv, node.id));
+    });
+
+    // P2 #14: 对话回放
+    menu.addItem((item: MenuItem) => {
+      item.setTitle('▶️ 回放对话');
+      item.setIcon('play-circle');
+      item.onClick(() => {
+        const replay = new ReplayController(cv, node.id);
+        replay.start();
+      });
     });
   }
 
