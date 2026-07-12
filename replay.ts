@@ -348,12 +348,10 @@ export class ReplayController {
       if (n) setHighlight(n, 'pending');
     }
 
-    const sp = SPEEDS[this.speedIdx];
-
     // 阶段 1: 全局总览 — 原生 zoomToFit
     console.log('[Canvas Branch Chat] Phase 1: zoomToFit');
     nativeZoomToFit(this.canvas);
-    await this.delay(sp.overviewMs);
+    await this.delay(this.getSpeed().overviewMs);
     if (this.guard()) return;
 
     // 阶段 2: 逐节点
@@ -382,7 +380,7 @@ export class ReplayController {
       console.log(`[Canvas Branch Chat] Focus [${this.idx}] node=${this.nodeIds[this.idx]}, bbox=${JSON.stringify(bbox)}`);
       nativeZoomToBbox(this.canvas, bbox);
 
-      await this.delay(sp.dwellMs);
+      await this.delay(this.getSpeed().dwellMs);
       if (this.cancelled) break;
 
       setHighlight(node, 'played');
@@ -437,6 +435,10 @@ export class ReplayController {
     this.rebuild();
     const newIdx = this.nodeIds.indexOf(cur);
     if (newIdx >= 0) this.idx = newIdx;
+  }
+
+  private getSpeed(): SpeedPreset {
+    return SPEEDS[this.speedIdx] ?? SPEEDS[1];
   }
 
   private rebuild(): void {
