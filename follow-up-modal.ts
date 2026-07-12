@@ -206,7 +206,7 @@ export class FollowUpModal extends Modal {
     const model = this.models.find(m => m.id === this.modelId) || this.models[0];
     if (!model) return [];
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Canvas runtime not fully typed
     const apiKey = (this.canvas as any)?.plugin?.settings?.resolveApiKey?.(model)
       || process.env[model.apiKeyEnvVar];
     if (!apiKey) return [];

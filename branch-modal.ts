@@ -155,7 +155,7 @@ export class BranchModal extends Modal {
           dropdown.setValue(currentModel);
           // 高亮标记覆盖了全局选择的项
           if (currentModel !== this.globalModelId) {
-            dropdown.selectEl.style.fontWeight = 'bold';
+            dropdown.selectEl.addClass('replay-model-highlight');
           }
           dropdown.onChange((value) => {
             this.directionModelIds[index] = value;

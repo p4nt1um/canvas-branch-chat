@@ -5,16 +5,13 @@
  * - zoomToFit()       → 全局总览
  * - zoomToBbox(bbox)  → 聚焦节点
  * - getViewportBBox() → 保存/还原视口
- *
- * 不自建动画，不自定义 viewport 属性。
  */
 
 import { Notice } from 'obsidian';
 import { CanvasRuntimeNode, CanvasRuntimeView } from './types';
 import { findChildNodeIds, findNodeById, getNodeRole, findParentNodeId, getNodeCreatedAt } from './context';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyCanvas = CanvasRuntimeView & Record<string, any>;
+type AnyCanvas = CanvasRuntimeView & Record<string, unknown>;
 
 type TraversalMode = 'time' | 'depth' | 'breadth';
 
@@ -45,7 +42,6 @@ function nodeBBox(node: CanvasRuntimeNode): BBox {
   };
 }
 
-/** 给 BBox 加 padding（向外扩展） */
 function padBBox(bbox: BBox, ratio: number): BBox {
   const w = bbox.maxX - bbox.minX;
   const h = bbox.maxY - bbox.minY;
@@ -59,32 +55,22 @@ function padBBox(bbox: BBox, ratio: number): BBox {
   };
 }
 
-/** 调用原生 zoomToFit */
 function nativeZoomToFit(canvas: AnyCanvas): void {
-  if (typeof canvas.zoomToFit === 'function') {
-    canvas.zoomToFit();
-  } else {
-    console.warn('[Canvas Branch Chat] zoomToFit not found');
-  }
+  const fn = canvas.zoomToFit;
+  if (typeof fn === 'function') fn.call(canvas);
 }
 
-/** 调用原生 zoomToBbox */
 function nativeZoomToBbox(canvas: AnyCanvas, bbox: BBox): void {
-  if (typeof canvas.zoomToBbox === 'function') {
-    canvas.zoomToBbox(bbox);
-  } else {
-    console.warn('[Canvas Branch Chat] zoomToBbox not found');
-  }
+  const fn = canvas.zoomToBbox;
+  if (typeof fn === 'function') fn.call(canvas, bbox);
 }
 
-/** 获取当前视口 BBox */
 function nativeGetViewportBBox(canvas: AnyCanvas): BBox | null {
-  if (typeof canvas.getViewportBBox === 'function') {
-    return canvas.getViewportBBox();
-  }
-  // 兜底：从节点数据推算
-  if (typeof canvas.getData === 'function') {
-    const data = canvas.getData();
+  const fn = canvas.getViewportBBox;
+  if (typeof fn === 'function') return fn.call(canvas);
+  const getData = canvas.getData;
+  if (typeof getData === 'function') {
+    const data = getData.call(canvas);
     if (data?.nodes?.length > 0) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (const n of data.nodes) {
@@ -100,7 +86,7 @@ function nativeGetViewportBBox(canvas: AnyCanvas): BBox | null {
 }
 
 // ============================================================
-// 节点高亮（绝不碰 transform）
+// 节点高亮（CSS class 驱动，不用 inline style）
 // ============================================================
 
 function nodeEl(node: CanvasRuntimeNode): HTMLElement | null {
@@ -112,35 +98,14 @@ function setHighlight(node: CanvasRuntimeNode, state: 'pending' | 'current' | 'p
   if (!el) return;
   el.removeClass('replay-pending', 'replay-current', 'replay-played');
   el.addClass(`replay-${state}`);
-
-  if (state === 'pending') {
-    el.style.opacity = '0.25';
-    el.style.filter = 'grayscale(0.7)';
-    el.style.boxShadow = '';
-    el.style.zIndex = '';
-  } else if (state === 'current') {
-    el.style.opacity = '1';
-    el.style.filter = '';
-    el.style.boxShadow = '0 0 0 4px var(--interactive-accent), 0 8px 36px rgba(0,0,0,0.3)';
-    el.style.zIndex = '100';
-  } else {
-    el.style.opacity = '0.55';
-    el.style.filter = '';
-    el.style.boxShadow = '0 0 0 2px var(--interactive-accent)';
-    el.style.zIndex = '';
-  }
 }
 
 function clearAllStyles(canvas: AnyCanvas): void {
-  const container = canvas.canvasEl ?? canvas.containerEl ?? canvas.contentEl ?? canvas.el;
+  const container = (canvas.canvasEl ?? canvas.containerEl ?? canvas.contentEl ?? canvas.el) as HTMLElement | undefined;
   if (!container?.querySelectorAll) return;
   const nodes = container.querySelectorAll('.canvas-node') as NodeListOf<HTMLElement>;
   nodes.forEach((el) => {
     el.removeClass('replay-pending', 'replay-current', 'replay-played');
-    el.style.opacity = '';
-    el.style.filter = '';
-    el.style.boxShadow = '';
-    el.style.zIndex = '';
   });
 }
 
@@ -158,9 +123,6 @@ function findRootId(canvas: AnyCanvas, startId: string): string {
 }
 
 function traverseTime(canvas: AnyCanvas, rootId: string): string[] {
-  // 时间线模式：按真实创建时间排序
-  // 收集所有对话节点，按 createdAt 升序
-  // 旧节点没有 createdAt 时 fallback 到 BFS 层序 + y/x
   const seen = new Set<string>();
   const items: { id: string; createdAt: number | null; y: number; x: number }[] = [];
 
@@ -171,24 +133,16 @@ function traverseTime(canvas: AnyCanvas, rootId: string): string[] {
     if (!node) return;
     const role = getNodeRole(node);
     if (role === 'user' || role === 'assistant') {
-      items.push({
-        id,
-        createdAt: getNodeCreatedAt(node),
-        y: node.y,
-        x: node.x,
-      });
+      items.push({ id, createdAt: getNodeCreatedAt(node), y: node.y, x: node.x });
     }
     for (const child of findChildNodeIds(canvas, id)) walk(child);
   };
   walk(rootId);
 
-  // 判断是否有足够多的节点带 createdAt
   const withTimestamp = items.filter(i => i.createdAt !== null);
   if (withTimestamp.length === items.length && items.length > 0) {
-    // 全部有createdAt — 直接按时间排序
     items.sort((a, b) => (a.createdAt! - b.createdAt!));
   } else {
-    // 部分或全部没有 createdAt（旧节点）— fallback 到 y 再 x
     items.sort((a, b) => a.y - b.y || a.x - b.x);
   }
 
@@ -213,7 +167,6 @@ function traverseDepth(canvas: AnyCanvas, rootId: string): string[] {
   return result;
 }
 
-/** 广度优先：按层级遍历，同层内按 createdAt(或 x) 排序 */
 function traverseBreadth(canvas: AnyCanvas, rootId: string): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -237,7 +190,6 @@ function traverseBreadth(canvas: AnyCanvas, rootId: string): string[] {
       }
     }
 
-    // 同层排序：优先 createdAt，fallback x
     levelItems.sort((a, b) => {
       if (a.createdAt !== null && b.createdAt !== null) return a.createdAt - b.createdAt;
       return a.x - b.x;
@@ -268,19 +220,18 @@ function createControlBar(total: number, cb: {
   onMode: (m: TraversalMode) => void;
   onSpeed: (i: number) => void;
 }): ControlBar {
-  const el = document.body.createDiv({ cls: 'replay-bar' });
-  el.style.pointerEvents = 'auto';
+  const doc = activeDocument;
+  const el = doc.body.createDiv({ cls: 'replay-bar' });
 
-  // helper: 用 pointerdown 替代 click，绕过 Canvas 事件捕获
   const onBtn = (b: HTMLElement, fn: () => void) => {
-    b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
+    b.addEventListener('pointerdown', (e: PointerEvent) => { e.preventDefault(); e.stopPropagation(); fn(); });
   };
 
   // 左：播放
   const left = el.createDiv({ cls: 'replay-bar-left' });
   const mkBtn = (icon: string, title: string, fn: () => void) => {
     const b = left.createEl('button', { cls: 'replay-bar-btn' });
-    b.innerHTML = icon;
+    b.textContent = icon;
     b.title = title;
     onBtn(b, fn);
     return b;
@@ -323,7 +274,7 @@ function createControlBar(total: number, cb: {
   const closeDrop = (e: PointerEvent) => {
     if (!speedWrap.contains(e.target as Node)) speedDrop.toggleClass('show', false);
   };
-  document.addEventListener('pointerdown', closeDrop, true);
+  doc.addEventListener('pointerdown', closeDrop, true);
 
   // 右：进度 + 退出
   const right = el.createDiv({ cls: 'replay-bar-right' });
@@ -337,14 +288,14 @@ function createControlBar(total: number, cb: {
 
   return {
     setProgress: (cur, t) => { progress.textContent = `${cur + 1}/${t}`; },
-    setPaused: (paused) => { playBtn.innerHTML = paused ? '▶' : '⏸'; },
+    setPaused: (paused) => { playBtn.textContent = paused ? '▶' : '⏸'; },
     setMode: (mode) => {
       modeT.toggleClass('replay-bar-mode-active', mode === 'time');
       modeB.toggleClass('replay-bar-mode-active', mode === 'breadth');
       modeD.toggleClass('replay-bar-mode-active', mode === 'depth');
     },
     destroy: () => {
-      document.removeEventListener('pointerdown', closeDrop, true);
+      doc.removeEventListener('pointerdown', closeDrop, true);
       el.remove();
     },
   };
@@ -383,7 +334,6 @@ export class ReplayController {
   }
 
   private async run(): Promise<void> {
-    const rootId = findRootId(this.canvas, this.startNodeId);
     this.rebuild();
     if (this.nodeIds.length === 0) {
       new Notice('没有可回放的对话节点');
@@ -392,10 +342,8 @@ export class ReplayController {
 
     console.log(`[Canvas Branch Chat] 🎬 Replay: ${this.nodeIds.length} nodes, mode=${this.mode}`);
 
-    // 保存原视口
     this.savedBBox = nativeGetViewportBBox(this.canvas);
 
-    // 控制条
     this.bar = createControlBar(this.nodeIds.length, {
       onTogglePause: () => this.togglePause(),
       onPrev: () => this.prev(),
@@ -407,14 +355,12 @@ export class ReplayController {
 
     this.bindKeys();
 
-    // 标记 pending
     for (const id of this.nodeIds) {
       const n = findNodeById(this.canvas, id);
       if (n) setHighlight(n, 'pending');
     }
 
-    // 阶段 1: 全局总览 — 原生 zoomToFit
-    console.log('[Canvas Branch Chat] Phase 1: zoomToFit');
+    // 阶段 1: 全局总览
     nativeZoomToFit(this.canvas);
     await this.delay(this.getSpeed().overviewMs);
     if (this.guard()) return;
@@ -432,7 +378,6 @@ export class ReplayController {
       this.bar?.setProgress(this.idx, this.nodeIds.length);
       setHighlight(node, 'current');
 
-      // 每 N 张回一次总览
       if (sinceOverview >= BACKTRACK_EVERY) {
         nativeZoomToFit(this.canvas);
         await this.delay(500);
@@ -440,9 +385,7 @@ export class ReplayController {
         sinceOverview = 0;
       }
 
-      // 聚焦当前节点 — 原生 zoomToBbox（加 30% padding 让卡片不贴边）
       const bbox = padBBox(nodeBBox(node), 1.3);
-      console.log(`[Canvas Branch Chat] Focus [${this.idx}] node=${this.nodeIds[this.idx]}, bbox=${JSON.stringify(bbox)}`);
       nativeZoomToBbox(this.canvas, bbox);
 
       await this.delay(this.getSpeed().dwellMs);
@@ -452,23 +395,16 @@ export class ReplayController {
       sinceOverview++;
     }
 
-    // 最后回总览
     if (!this.cancelled && this.nodeIds.length > 0) {
       nativeZoomToFit(this.canvas);
     }
 
-    // 结束
-    if (!this.cancelled) {
-      console.log('[Canvas Branch Chat] 🎬 Replay finished');
-    }
     this.teardown();
   }
 
   private guard(): boolean {
     return this.cancelled;
   }
-
-  // ── 用户控制 ──
 
   private togglePause(): void {
     this.paused = !this.paused;
@@ -517,26 +453,23 @@ export class ReplayController {
     }
   }
 
-  // ── 延迟 ──
-
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => {
       const check = () => {
         if (this.cancelled) { resolve(); return; }
-        if (this.paused) { setTimeout(check, 100); return; }
-        setTimeout(resolve, ms);
+        if (this.paused) { window.setTimeout(check, 100); return; }
+        window.setTimeout(resolve, ms);
       };
-      setTimeout(check, 50);
+      window.setTimeout(check, 50);
     });
   }
 
-  // ── 键盘 ──
-
   private bindKeys(): void {
     this.keyHandler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if ((e.target as HTMLElement)?.contentEditable === 'true') return;
+      if (target?.contentEditable === 'true') return;
 
       switch (e.key) {
         case ' ':
@@ -555,8 +488,7 @@ export class ReplayController {
           e.preventDefault(); e.stopPropagation();
           this.next();
           break;
-        case 'b':
-        case 'B':
+        case 'b': case 'B':
           this.changeMode('breadth');
           break;
         case 't': case 'T':
@@ -567,17 +499,15 @@ export class ReplayController {
           break;
       }
     };
-    document.addEventListener('keydown', this.keyHandler, true);
+    activeDocument.addEventListener('keydown', this.keyHandler, true);
   }
 
   private unbindKeys(): void {
     if (this.keyHandler) {
-      document.removeEventListener('keydown', this.keyHandler, true);
+      activeDocument.removeEventListener('keydown', this.keyHandler, true);
       this.keyHandler = null;
     }
   }
-
-  // ── 清理 ──
 
   private teardown(): void {
     this.unbindKeys();
@@ -585,7 +515,6 @@ export class ReplayController {
     this.bar?.destroy();
     this.bar = null;
 
-    // 还原原视口
     if (this.savedBBox) {
       nativeZoomToBbox(this.canvas, this.savedBBox);
     }

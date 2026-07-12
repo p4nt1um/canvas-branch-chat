@@ -187,6 +187,28 @@
 /* P2 #14: 对话回放                                              */
 /* ============================================================ */
 
+.replay-model-highlight {
+  font-weight: bold;
+}
+
+/* P2 #14 节点高亮状态 — 全部用 CSS class，不用 inline style */
+
+.replay-pending {
+  opacity: 0.25;
+  filter: grayscale(0.7);
+}
+
+.replay-current {
+  opacity: 1;
+  box-shadow: 0 0 0 4px var(--interactive-accent), 0 8px 36px rgba(0,0,0,0.3);
+  z-index: 100;
+}
+
+.replay-played {
+  opacity: 0.55;
+  box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
 /* 控制条 — fixed 定位，屏幕顶部居中 */
 .replay-bar {
   position: fixed;
@@ -204,7 +226,6 @@
   box-shadow: 0 4px 14px rgba(0,0,0,0.18);
   z-index: 100000;
   font-size: 13px;
-  pointer-events: auto;
 }
 
 .replay-bar-left,

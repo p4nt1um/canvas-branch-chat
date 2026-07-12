@@ -21,7 +21,7 @@ export default class CanvasBranchChatPlugin extends Plugin {
     this.settings.addSettingsTab();
 
     // 2. 初始化 Skills 扫描器
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- vault adapter basePath not in public API
     this.skillScanner = new SkillScanner((this.app.vault.adapter as any).basePath || '');
     this.skillScanner.scan().then((skills) => {
       console.log(`Canvas Branch Chat: loaded ${skills.length} skills`);

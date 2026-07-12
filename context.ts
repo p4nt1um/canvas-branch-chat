@@ -179,7 +179,7 @@ export function setNodeColor(node: CanvasRuntimeNode, color: string): void {
  *
  * 同时写入 canvas 数据层（持久化）和节点运行时
  */
-export function setNodeMetadata(node: CanvasRuntimeNode, metadata: Record<string, any>): void {
+export function setNodeMetadata(node: CanvasRuntimeNode, metadata: Record<string, unknown>): void {
   try {
     const canvas = node.canvas;
     if (canvas) {
