@@ -55,6 +55,17 @@ interface Viewport {
   zoom: number;
 }
 
+/** 统一获取 Canvas DOM 容器 */
+function getContainerEl(canvas: CanvasRuntimeView): HTMLElement | null {
+  const c = canvas as unknown as {
+    containerEl?: HTMLElement;
+    canvasEl?: HTMLElement;
+    contentEl?: HTMLElement;
+    view?: { containerEl?: HTMLElement };
+  };
+  return c.containerEl || c.canvasEl || c.contentEl || c.view?.containerEl || null;
+}
+
 /** 读取当前 viewport */
 function getViewport(canvas: CanvasRuntimeView): Viewport {
   const c = canvas as unknown as {
@@ -94,15 +105,12 @@ function viewportForNode(node: CanvasRuntimeNode, canvas: CanvasRuntimeView): Vi
   const vp = getViewport(canvas);
 
   // 尝试读取 Canvas 实际可视区域大小
-  const c = canvas as unknown as {
-    containerEl?: HTMLElement;
-    width?: number;
-    height?: number;
-  };
+  const containerEl = getContainerEl(canvas);
+  const c = canvas as unknown as { width?: number; height?: number };
   let viewW = 800;
   let viewH = 600;
-  if (c.containerEl) {
-    const rect = c.containerEl.getBoundingClientRect();
+  if (containerEl) {
+    const rect = containerEl.getBoundingClientRect();
     viewW = rect.width || viewW;
     viewH = rect.height || viewH;
   } else if (c.width && c.height) {
@@ -149,11 +157,11 @@ function viewportForOverview(
   const treeH = maxY - minY;
   const padding = 100;
 
-  const c = canvas as unknown as { containerEl?: HTMLElement };
+  const containerEl = getContainerEl(canvas);
   let viewW = 800;
   let viewH = 600;
-  if (c.containerEl) {
-    const rect = c.containerEl.getBoundingClientRect();
+  if (containerEl) {
+    const rect = containerEl.getBoundingClientRect();
     viewW = rect.width || viewW;
     viewH = rect.height || viewH;
   }
@@ -224,9 +232,9 @@ function getNodeEl(node: CanvasRuntimeNode): HTMLElement | null {
 }
 
 function clearHighlight(canvas: CanvasRuntimeView) {
-  const container = (canvas as unknown as { containerEl?: HTMLElement }).containerEl;
-  if (!container) return;
-  container.findAll('.replay-played, .replay-current, .replay-pending').forEach((el: HTMLElement) => {
+  const containerEl = getContainerEl(canvas);
+  if (!containerEl) return;
+  containerEl.findAll('.replay-played, .replay-current, .replay-pending').forEach((el: HTMLElement) => {
     el.removeClass('replay-played', 'replay-current', 'replay-pending');
   });
 }
@@ -430,8 +438,53 @@ export class ReplayController {
   constructor(canvas: CanvasRuntimeView, startNodeId: string) {
     this.canvas = canvas;
     this.startNodeId = startNodeId;
-    const c = canvas as unknown as { containerEl?: HTMLElement };
-    this.container = c.containerEl || (canvas as unknown as HTMLElement);
+    this.container = ReplayController.findContainer(canvas, startNodeId);
+  }
+
+  /** 尝试多种方式找到 Canvas 的 DOM 容器 */
+  private static findContainer(canvas: CanvasRuntimeView, startNodeId: string): HTMLElement {
+    const candidates: { name: string; el: HTMLElement | null | undefined }[] = [
+      { name: 'containerEl', el: (canvas as unknown as { containerEl?: HTMLElement }).containerEl },
+      { name: 'canvasEl', el: (canvas as unknown as { canvasEl?: HTMLElement }).canvasEl },
+      { name: 'contentEl', el: (canvas as unknown as { contentEl?: HTMLElement }).contentEl },
+      { name: 'view.containerEl', el: (canvas as unknown as { view?: { containerEl?: HTMLElement } }).view?.containerEl },
+      { name: 'el', el: (canvas as unknown as { el?: HTMLElement }).el },
+      { name: 'dom', el: (canvas as unknown as { dom?: HTMLElement }).dom },
+    ];
+
+    for (const c of candidates) {
+      if (c.el && typeof c.el.createDiv === 'function') {
+        console.log(`[Canvas Branch Chat] Replay container found: ${c.name}`, c.el);
+        return c.el;
+      }
+    }
+
+    // 最后兜底：从 node.contentEl 往上找 Canvas 根容器
+    try {
+      const node = findNodeById(canvas, startNodeId);
+      if (node?.contentEl) {
+        const canvasEl = node.contentEl.closest('.canvas-node-container') as HTMLElement | null;
+        if (canvasEl) {
+          // 往上找 .canvas-node-container 的父级（实际 canvas 画布区域）
+          const canvasRoot = canvasEl.parentElement?.parentElement as HTMLElement | null;
+          if (canvasRoot && typeof canvasRoot.createDiv === 'function') {
+            console.log('[Canvas Branch Chat] Replay container found via DOM traversal:', canvasRoot);
+            return canvasRoot;
+          }
+          // 退而求其次，用 canvasEl 本身
+          if (typeof canvasEl.createDiv === 'function') {
+            console.log('[Canvas Branch Chat] Replay container fallback to canvasEl:', canvasEl);
+            return canvasEl;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    console.error('[Canvas Branch Chat] Could not find canvas container. Canvas keys:', Object.getOwnPropertyNames(canvas));
+    // 最后兜底返回 canvas 本身
+    return canvas as unknown as HTMLElement;
   }
 
   async start() {
