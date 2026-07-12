@@ -6,12 +6,15 @@
  * 流程：
  * 1. 初始化：缩放到整棵树可见，标记所有节点为 pending（暗淡）
  * 2. 逐节点：
- *    - 边框脉冲 → 当前节点原地 scale up → 停留阅读 → 缩小 → 标记 played
- * 3. 结束：清除高亮，回到原始 viewport
+ *    - 边框强调 → 当前节点原地 scale up → 停留阅读 → 缩小 → 标记 played
+ * 3. 结束：清除高亮，还原 viewport
  *
  * 两种遍历模式：
  * - T 时间线：按 y 坐标从上到下
  * - D 深度优先：沿每条分支走到底再回溯
+ *
+ * ⚠️ 关键：节点放大使用 CSS scale property（独立于 transform），不覆盖 Obsidian
+ *    Canvas 用于节点定位的 transform: translate(Xpx, Ypx)。
  */
 
 import { Notice } from 'obsidian';
@@ -33,7 +36,7 @@ interface ReplayConfig {
 const DEFAULT_CONFIG: ReplayConfig = {
   dwellMs: 3000,
   overviewMs: 1500,
-  transitionMs: 300,
+  transitionMs: 500,
 };
 
 const SPEED_PRESETS = [
@@ -72,20 +75,31 @@ function setViewport(canvas: CanvasRuntimeView, vp: Viewport): void {
     c.y = vp.y;
     c.zoom = vp.zoom;
   }
-  canvas.requestSave();
 }
 
-/** 获取 Canvas 可视区域尺寸 */
+/** 获取 Canvas 可视区域尺寸 — 遍历可能的容器 */
 function getCanvasViewportSize(canvas: CanvasRuntimeView): { w: number; h: number } {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c = canvas as any;
-  // 尝试多种方式获取容器尺寸
-  const el = c.containerEl || c.canvasEl || c.contentEl;
-  if (el) {
-    const rect = el.getBoundingClientRect();
-    return { w: rect.width || 800, h: rect.height || 600 };
+  const candidates = [
+    c.canvasEl,
+    c.contentEl,
+    c.containerEl,
+    c.el,
+    c.view?.containerEl,
+    c.view?.canvasEl,
+    c.view?.contentEl,
+  ];
+  for (const el of candidates) {
+    if (el && el.getBoundingClientRect) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 100 && rect.height > 100) {
+        return { w: rect.width, h: rect.height };
+      }
+    }
   }
-  return { w: c.width || 800, h: c.height || 600 };
+  // 兜底
+  return { w: window.innerWidth - 300, h: window.innerHeight - 100 };
 }
 
 /** 计算"整棵树可见"的 viewport */
@@ -109,13 +123,14 @@ function viewportForOverview(
 
   const treeW = maxX - minX;
   const treeH = maxY - minY;
-  const padding = 120;
+  const padding = 100;
 
   const { w: viewW, h: viewH } = getCanvasViewportSize(canvas);
 
   const zoomW = viewW / (treeW + padding * 2);
   const zoomH = viewH / (treeH + padding * 2);
-  const zoom = Math.max(0.15, Math.min(zoomW, zoomH, 1.5));
+  // 允许缩到很小（大树需要），但不低于 0.03（过小没意义）
+  const zoom = Math.max(0.03, Math.min(zoomW, zoomH, 1.0));
 
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
@@ -157,55 +172,76 @@ function animateViewport(
   });
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
 // ============================================================
-// 节点高亮（原地放大方案）
+// 节点高亮 — 使用 CSS scale property（不覆盖 transform）
+// Obsidian Canvas 用 transform: translate(Xpx, Ypx) 定位节点
+// 覆盖 transform 会导致节点飞回 (0,0) 全部堆叠 ❌
+// CSS scale property 是独立的，缩放节点但不影响定位 ✅
 // ============================================================
 
 function getNodeEl(node: CanvasRuntimeNode): HTMLElement | null {
   return (node.contentEl?.closest('.canvas-node') as HTMLElement) || null;
 }
 
+/** 计算最大缩放比例 */
+function computeMaxScale(node: CanvasRuntimeNode, canvas: CanvasRuntimeView): number {
+  const nodeW = node.width || 400;
+  const { w: viewW } = getCanvasViewportSize(canvas);
+  const currentZoom = getViewport(canvas).zoom;
+  const screenNodeW = nodeW * currentZoom;
+  const targetScreenW = viewW * 0.72;
+  return Math.max(1.5, targetScreenW / screenNodeW);
+}
+
 /**
- * 最大化当前节点：CSS transform scale + z-index 提层 + 背景上浮
+ * 原地放大：先用 rAF + force reflow 确保初始 scale:1 被提交，
+ * 再设置目标 scale，触发 CSS transition。
  */
 function amplifyNode(node: CanvasRuntimeNode, canvas: CanvasRuntimeView) {
   const el = getNodeEl(node);
   if (!el) return;
 
-  // 计算缩放比例：让节点宽度占视口 75%
-  const nodeW = node.width || 400;
-  const { w: viewW } = getCanvasViewportSize(canvas);
-  const currentZoom = getViewport(canvas).zoom;
+  const scale = computeMaxScale(node, canvas);
 
-  // 当前 zoom 下节点在屏幕上的宽度 = nodeW * currentZoom
-  const screenNodeW = nodeW * currentZoom;
-  const targetScreenW = viewW * 0.75;
-  const scale = targetScreenW / screenNodeW;
-
-  el.style.transition = 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease, z-index 0s';
-  el.style.transform = `scale(${scale})`;
+  el.style.transition = 'scale 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease';
+  el.style.boxShadow = '0 0 0 3px var(--interactive-accent), 0 8px 40px rgba(0,0,0,0.25)';
   el.style.zIndex = '200';
-  el.style.boxShadow = '0 0 0 3px var(--interactive-accent), 0 8px 40px rgba(0,0,0,0.3)';
+
+  // 强制浏览器提交 scale:1 的初始状态，再跳到目标值，这样才能触发 transition
+  el.style.scale = '1';
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  window.getComputedStyle(el).scale; // force reflow
+  el.style.scale = String(scale);
 }
 
-/** 缩小节点回原样 */
+/**
+ * 缩小还原：先切到 scale:1 过渡，transitionend 后清理 style
+ */
 function unamplifyNode(node: CanvasRuntimeNode) {
   const el = getNodeEl(node);
   if (!el) return;
-  el.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease, z-index 0s 0.2s';
-  el.style.transform = '';
-  el.style.zIndex = '';
+
+  el.style.transition = 'scale 0.25s ease, box-shadow 0.25s ease';
+  el.style.scale = '1';
   el.style.boxShadow = '';
+
+  const onEnd = (e: TransitionEvent) => {
+    if (e.propertyName !== 'scale') return;
+    el.removeEventListener('transitionend', onEnd);
+    el.style.scale = '';
+    el.style.zIndex = '';
+    el.style.transition = '';
+    el.style.boxShadow = '';
+  };
+  el.addEventListener('transitionend', onEnd);
 }
 
+/** 暴力清除所有节点的回放样式（回放结束/取消时调用） */
 function clearAllHighlights(canvas: CanvasRuntimeView) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const container = (canvas as any).containerEl || (canvas as any).canvasEl || (canvas as any).contentEl;
-  if (!container) return;
+  const c = canvas as any;
+  const container = c.canvasEl || c.containerEl || c.contentEl || c.el;
+  if (!container || !container.findAll) return;
   const all = container.findAll('.canvas-node') as HTMLElement[];
   all.forEach((el) => {
     el.removeClass('replay-played', 'replay-current', 'replay-pending');
@@ -215,9 +251,11 @@ function clearAllHighlights(canvas: CanvasRuntimeView) {
     el.style.transition = '';
     el.style.opacity = '';
     el.style.filter = '';
+    el.style.scale = '';
   });
 }
 
+/** 节点高亮状态标记 */
 function highlightNode(nodeId: string, canvas: CanvasRuntimeView, state: 'played' | 'current' | 'pending') {
   const node = findNodeById(canvas, nodeId);
   if (!node) return;
@@ -226,15 +264,13 @@ function highlightNode(nodeId: string, canvas: CanvasRuntimeView, state: 'played
   el.removeClass('replay-played', 'replay-current', 'replay-pending');
   el.addClass(`replay-${state}`);
 
-  // pending: 暗淡
-  // played: 恢复正常
   if (state === 'pending') {
     el.style.opacity = '0.35';
     el.style.filter = 'grayscale(0.6)';
-    el.style.transition = 'opacity 0.3s ease, filter 0.3s ease';
   } else if (state === 'played') {
     el.style.opacity = '';
     el.style.filter = '';
+    el.style.boxShadow = '0 0 0 2px var(--interactive-accent)';
   }
 }
 
@@ -298,7 +334,7 @@ function findRoot(canvas: CanvasRuntimeView, nodeId: string): string {
 }
 
 // ============================================================
-// 控制条 UI
+// 控制条 UI — 浮动在 Canvas 顶部
 // ============================================================
 
 interface ControlBarCallbacks {
@@ -335,7 +371,7 @@ function createControlBar(
   nextBtn.title = '下一个 (→)';
   nextBtn.addEventListener('click', callbacks.onNext);
 
-  // 中间：模式切换
+  // 中间：模式 + 速度
   const center = bar.createDiv({ cls: 'replay-controls-center' });
 
   const modeTime = center.createEl('button', { cls: 'replay-mode-btn replay-mode-active' });
@@ -369,12 +405,13 @@ function createControlBar(
     speedMenu.classList.toggle('replay-speed-show');
   });
 
-  // 关闭下拉：点其他地方
-  document.addEventListener('click', (e) => {
+  // 关闭下拉
+  const docClick = (e: MouseEvent) => {
     if (!speedWrap.contains(e.target as Node)) {
       speedMenu.removeClass('replay-speed-show');
     }
-  });
+  };
+  document.addEventListener('click', docClick);
 
   // 右侧：进度 + 退出
   const right = bar.createDiv({ cls: 'replay-controls-right' });
@@ -383,7 +420,7 @@ function createControlBar(
   const progressText = progress.createSpan({ cls: 'replay-progress-text', text: `1/${totalNodes}` });
 
   const exitBtn = right.createEl('button', { cls: 'replay-btn replay-exit-btn' });
-  exitBtn.innerHTML = '退出';
+  exitBtn.innerHTML = '✕ 退出';
   exitBtn.title = '退出回放 (Esc)';
   exitBtn.addEventListener('click', callbacks.onExit);
 
@@ -404,6 +441,10 @@ function createControlBar(
       modeTime.toggleClass('replay-mode-active', mode === 'time');
       modeDepth.toggleClass('replay-mode-active', mode === 'depth');
     },
+    destroy: () => {
+      document.removeEventListener('click', docClick);
+      bar.remove();
+    },
   };
 }
 
@@ -422,7 +463,6 @@ export class ReplayController {
   private cancelled: boolean = false;
   private controlBar: ReturnType<typeof createControlBar> | null = null;
   private savedViewport: Viewport | null = null;
-  private overviewViewport: Viewport | null = null;
   private onKeyDown: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(canvas: CanvasRuntimeView, startNodeId: string) {
@@ -449,14 +489,16 @@ export class ReplayController {
       return;
     }
 
+    console.log(`[Canvas Branch Chat] 🎬 Replay start: ${this.nodeIds.length} nodes, mode=${this.mode}`);
+
     // 1. 保存原 viewport
     this.savedViewport = getViewport(this.canvas);
 
-    // 2. 创建控制条 — 挂到 Canvas 容器上
+    // 2. 创建控制条
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const canvas = this.canvas as any;
-    const parent = canvas.containerEl || canvas.canvasEl || canvas.contentEl || canvas.el;
-    if (!parent || typeof parent.createDiv !== 'function') {
+    const parent = canvas.canvasEl || canvas.containerEl || canvas.contentEl || canvas.el;
+    if (!parent || !parent.createDiv) {
       console.error('[Canvas Branch Chat] Cannot find canvas container for control bar');
       new Notice('❌ 无法创建控制条');
       return;
@@ -470,7 +512,7 @@ export class ReplayController {
       onSetSpeed: (speed) => this.setSpeed(speed),
     });
 
-    // 3. 注册全局键盘（document 级别，绕过 Canvas 事件捕获）
+    // 3. 注册键盘
     this.registerKeyboard();
 
     // 4. 标记所有节点 pending
@@ -480,14 +522,15 @@ export class ReplayController {
 
     const config = this.getConfig();
 
-    // 5. 阶段 1: 全局总览 — 一次到位，不再动
-    this.overviewViewport = viewportForOverview(this.canvas, this.nodeIds);
-    await animateViewport(this.canvas, this.savedViewport, this.overviewViewport, config.transitionMs);
+    // 5. 阶段 1: 全局总览 — 一次到位，后续不再改 viewport
+    const overviewViewport = viewportForOverview(this.canvas, this.nodeIds);
+    console.log(`[Canvas Branch Chat] Overview viewport:`, overviewViewport);
+    await animateViewport(this.canvas, this.savedViewport, overviewViewport, config.transitionMs);
     if (this.cancelled) { this.cleanup(); return; }
     await this.interruptibleDelay(config.overviewMs);
     if (this.cancelled) { this.cleanup(); return; }
 
-    // 6. 阶段 2: 逐节点原地放大
+    // 6. 阶段 2: 逐节点放大缩小
     for (this.currentIndex = 0; this.currentIndex < this.nodeIds.length; this.currentIndex++) {
       if (this.cancelled) break;
 
@@ -497,24 +540,24 @@ export class ReplayController {
 
       this.controlBar?.updateProgress(this.currentIndex);
 
-      // 标记当前
+      // 6a. 标记当前
       highlightNode(nodeId, this.canvas, 'current');
 
-      // 原地放大
+      // 6b. 原地放大（带弹性动画）
       amplifyNode(node, this.canvas);
 
-      // 停留阅读
+      // 6c. 停留阅读
       await this.interruptibleDelay(config.dwellMs);
       if (this.cancelled) break;
 
-      // 缩小
+      // 6d. 缩小还原
       unamplifyNode(node);
 
-      // 标记已播放
+      // 6e. 标记已播放
       highlightNode(nodeId, this.canvas, 'played');
     }
 
-    // 7. 阶段 3: 完成
+    // 7. 完成
     this.finish();
   }
 
@@ -529,19 +572,15 @@ export class ReplayController {
 
   private prev() {
     if (this.currentIndex > 0) {
-      // 还原当前节点
       const curId = this.nodeIds[this.currentIndex];
       const curNode = findNodeById(this.canvas, curId);
       if (curNode) unamplifyNode(curNode);
-      // 恢复为 played 状态
       if (curId) highlightNode(curId, this.canvas, 'pending');
-
       this.currentIndex -= 2;
     }
   }
 
   private next() {
-    // 跳过当前停留
     this.paused = false;
   }
 
@@ -581,20 +620,25 @@ export class ReplayController {
     this.nodeIds = this.mode === 'time'
       ? traversalTime(this.canvas, rootId)
       : traversalDepth(this.canvas, rootId);
+    console.log(`[Canvas Branch Chat] Traversal rebuilt: ${this.nodeIds.length} nodes, mode=${this.mode}`);
   }
 
   // ============================================================
-  // 延迟（支持暂停+取消中断）
+  // 延迟（支持暂停 + 取消）
   // ============================================================
 
   private interruptibleDelay(ms: number): Promise<void> {
+    if (ms <= 0) return Promise.resolve();
     return new Promise((resolve) => {
+      const start = Date.now();
       const check = () => {
         if (this.cancelled) { resolve(); return; }
         if (this.paused) {
           window.setTimeout(check, 100);
         } else {
-          window.setTimeout(resolve, ms);
+          const remaining = ms - (Date.now() - start);
+          if (remaining <= 0) { resolve(); }
+          else { window.setTimeout(resolve, remaining); }
         }
       };
       window.setTimeout(check, 100);
@@ -602,7 +646,7 @@ export class ReplayController {
   }
 
   // ============================================================
-  // 键盘 — 注册到 document 级别，绕过 Canvas 事件捕获
+  // 键盘 — document 级别 capture phase
   // ============================================================
 
   private registerKeyboard() {
@@ -653,20 +697,23 @@ export class ReplayController {
   // ============================================================
 
   private finish() {
-    // 先缩回原 viewport
+    console.log('[Canvas Branch Chat] 🎬 Replay finished');
     const currentVp = getViewport(this.canvas);
     if (this.savedViewport) {
-      void animateViewport(this.canvas, currentVp, this.savedViewport, DEFAULT_CONFIG.transitionMs);
+      void animateViewport(this.canvas, currentVp, this.savedViewport, 500);
     }
     this.cleanup();
-    new Notice('回放完成');
   }
 
   private cleanup() {
     this.unregisterKeyboard();
     clearAllHighlights(this.canvas);
-    this.controlBar?.bar.remove();
-    this.controlBar = null;
+    if (this.controlBar) {
+      this.controlBar.destroy();
+      this.controlBar = null;
+    }
+    // 确保 viewport 持久化
+    this.canvas.requestSave();
   }
 
   destroy() {
@@ -675,6 +722,7 @@ export class ReplayController {
     this.cleanup();
     if (this.savedViewport) {
       setViewport(this.canvas, this.savedViewport);
+      this.canvas.requestSave();
     }
   }
 }
