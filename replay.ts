@@ -130,16 +130,22 @@ function calcOverview(canvas: CanvasRuntimeView, nodeIds: string[]): Viewport {
   };
 }
 
-/** 计算"聚焦单个节点"的 viewport */
-function calcFocus(node: CanvasRuntimeNode): Viewport {
+/** 计算"聚焦单个节点"的 viewport — 算法 D：自适应+倍率限制 */
+function calcFocus(node: CanvasRuntimeNode, overviewZoom: number): Viewport {
   const nw = node.width || 400;
   const nh = node.height || 200;
   const { w, h } = getViewSize();
 
-  // 节点占视口 70%
-  const zoom = Math.min((w * 0.7) / nw, (h * 0.7) / nh, 2.5);
+  // 卡片占视口 55%（宽高取更紧的约束）
+  const zoomByW = (w * 0.55) / nw;
+  const zoomByH = (h * 0.55) / nh;
+  let zoom = Math.min(zoomByW, zoomByH);
 
-  // Obsidian Canvas viewport: x/y 是视口中心 = 节点中心
+  // 限制：overview_zoom × 2.5 ~ 4（保证跳跃感但不出界）
+  zoom = Math.max(zoom, overviewZoom * 2.5);
+  zoom = Math.min(zoom, overviewZoom * 4);
+
+  // Obsidian Canvas viewport: x/y = 视口中心 = 节点中心
   return {
     x: node.x + nw / 2,
     y: node.y + nh / 2,
@@ -326,15 +332,16 @@ function createControlBar(total: number, cb: {
     opt.addEventListener('click', () => {
       speedBtn.textContent = `⏱ ${s.label}`;
       cb.onSpeed(i);
-      speedDrop.removeClass('show');
+      speedDrop.toggleClass('show', false);
     });
   });
   speedBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    speedDrop.classList.toggle('show');
+    const isOpen = speedDrop.hasClass('show');
+    speedDrop.toggleClass('show', !isOpen);
   });
   const closeDrop = (e: MouseEvent) => {
-    if (!speedWrap.contains(e.target as Node)) speedDrop.removeClass('show');
+    if (!speedWrap.contains(e.target as Node)) speedDrop.toggleClass('show', false);
   };
   document.addEventListener('click', closeDrop);
 
@@ -427,17 +434,21 @@ export class ReplayController {
       if (n) setHighlight(n, 'pending');
     }
 
-    const sp = SPEEDS[this.speedIdx];
-
     // 阶段 1: 全局总览
     const overviewVp = calcOverview(this.canvas, this.nodeIds);
     console.log('[Canvas Branch Chat] overview:', JSON.stringify(overviewVp));
+    const sp = SPEEDS[this.speedIdx];
     await animateViewport(this.canvas, this.savedVp, overviewVp, sp.zoomMs);
     if (this.guard()) return;
     await this.delay(sp.overviewMs);
     if (this.guard()) return;
 
-    // 阶段 2: 逐节点
+    // 阶段 2: 逐节点（连续模式）
+    // 相邻节点直接 pan，每 N 张回一次总览
+    const BACKTRACK_INTERVAL = 4;
+    let lastFocusVp = overviewVp;
+    let sinceLastOverview = 0;
+
     for (this.idx = 0; this.idx < this.nodeIds.length; this.idx++) {
       if (this.cancelled) break;
 
@@ -447,20 +458,44 @@ export class ReplayController {
       this.bar?.setProgress(this.idx, this.nodeIds.length);
       setHighlight(node, 'current');
 
-      // zoom 到节点
-      const focusVp = calcFocus(node);
-      await animateViewport(this.canvas, overviewVp, focusVp, sp.zoomMs);
+      const focusVp = calcFocus(node, overviewVp.zoom);
+
+      // 决定动画起点：
+      // - 第一个节点：从总览 zoom in
+      // - 每 N 张或最后一帧：zoom out 回总览
+      // - 其他：从上一个焦点直接 pan
+      const isFirst = this.idx === 0;
+      const shouldBacktrack = sinceLastOverview >= BACKTRACK_INTERVAL;
+
+      if (isFirst || shouldBacktrack) {
+        // 先回总览（带动画）
+        if (!isFirst) {
+          await animateViewport(this.canvas, lastFocusVp, overviewVp, sp.zoomMs);
+          if (this.cancelled) break;
+          await this.delay(400); // 短暂停留总览
+          if (this.cancelled) break;
+        }
+        // 总览 → zoom in 当前节点
+        await animateViewport(this.canvas, overviewVp, focusVp, sp.zoomMs);
+        sinceLastOverview = 1;
+      } else {
+        // 上一个焦点 → pan 到当前节点
+        await animateViewport(this.canvas, lastFocusVp, focusVp, sp.zoomMs);
+        sinceLastOverview++;
+      }
       if (this.cancelled) break;
 
       // 停留阅读
       await this.delay(sp.dwellMs);
       if (this.cancelled) break;
 
-      // zoom 回总览
-      await animateViewport(this.canvas, focusVp, overviewVp, sp.zoomMs);
-      if (this.cancelled) break;
-
       setHighlight(node, 'played');
+      lastFocusVp = focusVp;
+    }
+
+    // 最后 zoom out 回总览
+    if (!this.cancelled && this.nodeIds.length > 0) {
+      await animateViewport(this.canvas, lastFocusVp, overviewVp, sp.zoomMs);
     }
 
     // 阶段 3: 结束还原
