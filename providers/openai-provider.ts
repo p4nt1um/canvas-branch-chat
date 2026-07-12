@@ -149,8 +149,8 @@ export class OpenAIProvider implements ChatProvider {
         },
       });
 
-      const data = response.json;
-      const models: string[] = data?.data?.map((m: { id: string }) => m.id) || [];
+      const data = response.json as { data?: Array<{ id: string }> };
+      const models: string[] = data?.data?.map(m => m.id) || [];
       return { ok: true, models };
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : '连接失败';

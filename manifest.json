@@ -1,7 +1,7 @@
 {
 	"id": "canvas-branch-chat",
 	"name": "Canvas Branch Chat",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"minAppVersion": "1.6.5",
 	"description": "Flowith-style branching AI conversations on Canvas. Fork, explore, and map your thinking.",
 	"author": "p4nt1um",

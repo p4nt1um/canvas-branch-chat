@@ -68,7 +68,7 @@ function nativeZoomToBbox(canvas: AnyCanvas, bbox: BBox): void {
 function nativeGetViewportBBox(canvas: AnyCanvas): BBox | null {
   const fn = canvas.getViewportBBox as (() => BBox) | undefined;
   if (typeof fn === 'function') return fn.call(canvas);
-  const getData = canvas.getData;
+  const getData = canvas.getData as (() => { nodes: Array<{ x: number; y: number; width?: number; height?: number }> }) | undefined;
   if (typeof getData === 'function') {
     const data = getData.call(canvas);
     if (data?.nodes?.length > 0) {
@@ -90,7 +90,7 @@ function nativeGetViewportBBox(canvas: AnyCanvas): BBox | null {
 // ============================================================
 
 function nodeEl(node: CanvasRuntimeNode): HTMLElement | null {
-  return (node.contentEl?.closest('.canvas-node') as HTMLElement) ?? null;
+  return node.contentEl?.closest('.canvas-node') as HTMLElement | null;
 }
 
 function setHighlight(node: CanvasRuntimeNode, state: 'pending' | 'current' | 'played'): void {

@@ -194,7 +194,7 @@ export default class CanvasBranchExtension {
       this.plugin.app,
       (result) => {
         if (!result.confirmed) return;
-        this.doBranch(sourceNode, canvas, result.directions);
+        void this.doBranch(sourceNode, canvas, result.directions);
       },
       undefined,
       skills,
@@ -320,8 +320,10 @@ export default class CanvasBranchExtension {
       sourceNode,
       models,
       defaultModelId,
-      async (result) => {
+      (result) => {
         if (!result.confirmed) return;
+
+        void (async () => {
 
         const model = this.plugin.settings.getModel(result.modelId)
           || this.plugin.settings.getDefaultModel();
@@ -429,6 +431,7 @@ export default class CanvasBranchExtension {
         // 等待所有请求完成
         await Promise.all(promises);
         canvas.requestSave();
+        })();
       },
     ).open();
   }

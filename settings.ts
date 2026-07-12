@@ -112,7 +112,7 @@ export default class SettingsManager {
   }
 
   async loadSettings() {
-    const raw = await this.plugin.loadData();
+    const raw: unknown = await this.plugin.loadData();
     this.settings = migrateSettings(raw);
     // 确保有 defaultModelId
     if (!this.settings.defaultModelId && this.settings.models.length > 0) {

@@ -125,7 +125,7 @@ export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'br
     const canvas = node.canvas;
     if (canvas) {
       const canvasData = canvas.getData();
-      const nodeData = canvasData.nodes.find((n: CanvasTextData) => n.id === node.id) as ChatNodeData | undefined;
+      const nodeData = (canvasData.nodes as ChatNodeData[]).find(n => n.id === node.id);
       if (nodeData && nodeData.chatRole) {
         return nodeData.chatRole;
       }
@@ -147,10 +147,10 @@ export function getNodeCreatedAt(node: CanvasRuntimeNode): number | null {
     const canvas = node.canvas;
     if (canvas) {
       const canvasData = canvas.getData();
-      const nodeData = canvasData.nodes.find((n: CanvasTextData) => n.id === node.id) as ChatNodeData | undefined;
+      const nodeData = (canvasData.nodes as ChatNodeData[]).find(n => n.id === node.id);
       if (nodeData?.createdAt) return nodeData.createdAt;
     }
-    const data = node.getData() as ChatNodeData;
+    const data = node.getData() as Partial<ChatNodeData>;
     return data?.createdAt ?? null;
   } catch {
     return null;
