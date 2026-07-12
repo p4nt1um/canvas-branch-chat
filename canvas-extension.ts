@@ -18,10 +18,10 @@ import { getNodeScrollHeight, generateId, truncateText } from './utils';
 import { BranchModal, BranchDirection } from './branch-modal';
 import { buildBranchContext, buildContextFromChain, buildMergeContext, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findNodeById } from './context';
 import { exportCanvasConversation } from './export';
-import { ReplayController } from './replay';
 import { parseSkillTag } from './skill-scanner';
 import { MergeModal } from './merge-modal';
 import { FollowUpModal } from './follow-up-modal';
+import { ReplayController } from './replay';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -131,13 +131,8 @@ export default class CanvasBranchExtension {
       item.setTitle('▶️ 回放对话');
       item.setIcon('play-circle');
       item.onClick(() => {
-        try {
-          const replay = new ReplayController(cv, node.id);
-          void replay.start();
-        } catch (err) {
-          console.error('[Canvas Branch Chat] Replay failed', err);
-          new Notice(`❌ 回放启动失败: ${err instanceof Error ? err.message : String(err)}`);
-        }
+        const replay = new ReplayController(cv, node.id);
+        void replay.start();
       });
     });
   }

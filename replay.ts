@@ -1,14 +1,17 @@
 /**
- * replay.ts — P2 #14 对话回放 v4
+ * replay.ts — P2 #14 对话回放
  *
- * 核心设计：
- * 1. 全局总览固定不动（一次性 zoom out 到整棵树可见）
- * 2. 逐节点缩放：动画 viewport 到当前节点 → 停留 → 回到总览
- * 3. 不触碰任何 .canvas-node 的 transform 属性
+ * 设计原则：用 Canvas viewport（zoom/pan）实现所有动画效果，
+ * 绝不修改 .canvas-node 的 inline style（Obsidian 用 transform 定位节点）。
  *
- * 两种遍历模式：
- * - T 时间线：按 y 坐标从上到下
- * - D 深度优先：沿每条分支走到底再回溯
+ * 三阶段流程：
+ *   1. 全局总览：viewport 平滑 zoom out 到整棵树可见
+ *   2. 逐节点聚焦：viewport 平滑 zoom in 到当前节点 → 边框高亮 + 停留 → zoom out 回总览
+ *   3. 结束还原：viewport 平滑回到原始位置
+ *
+ * 遍历模式：
+ *   T 时间线：所有节点按 y 坐标排序（从上到下）
+ *   D 深度优先：沿分支走到底再回溯
  */
 
 import { Notice } from 'obsidian';
@@ -21,52 +24,44 @@ import { findChildNodeIds, findNodeById, getNodeRole, findParentNodeId } from '.
 
 type TraversalMode = 'time' | 'depth';
 
-interface ReplayConfig {
-  dwellMs: number;
-  overviewMs: number;
-  zoomMs: number;
+interface SpeedPreset {
+  label: string;
+  dwellMs: number;   // 节点停留时间
+  overviewMs: number; // 总览停留时间
+  zoomMs: number;    // zoom 动画时长
 }
 
-const DEFAULT_CONFIG: ReplayConfig = {
-  dwellMs: 3000,
-  overviewMs: 1500,
-  zoomMs: 500,
-};
-
-const SPEED_PRESETS = [
-  { label: '慢', dwellMs: 5000, overviewMs: 2500, zoomMs: 800 },
-  { label: '中', dwellMs: 3000, overviewMs: 1500, zoomMs: 500 },
-  { label: '快', dwellMs: 1500, overviewMs: 800, zoomMs: 300 },
+const SPEEDS: SpeedPreset[] = [
+  { label: '慢', dwellMs: 5000, overviewMs: 2500, zoomMs: 700 },
+  { label: '中', dwellMs: 3000, overviewMs: 1500, zoomMs: 450 },
+  { label: '快', dwellMs: 1500, overviewMs: 800,  zoomMs: 300 },
 ];
 
 // ============================================================
-// Canvas Viewport 辅助
+// Viewport 辅助
 // ============================================================
 
-interface Viewport {
-  x: number;
-  y: number;
-  zoom: number;
-}
+interface Viewport { x: number; y: number; zoom: number; }
 
 function getViewport(canvas: CanvasRuntimeView): Viewport {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const c = canvas as any;
+  const c = canvas as unknown as Record<string, unknown>;
   if (typeof c.getViewport === 'function') {
-    const vp = c.getViewport();
+    const vp = (c.getViewport as () => Viewport)();
     return { x: vp.x ?? 0, y: vp.y ?? 0, zoom: vp.zoom ?? 1 };
   }
-  return { x: c.x ?? 0, y: c.y ?? 0, zoom: c.zoom ?? 1 };
+  return {
+    x: (c.x as number) ?? 0,
+    y: (c.y as number) ?? 0,
+    zoom: (c.zoom as number) ?? 1,
+  };
 }
 
 function setViewport(canvas: CanvasRuntimeView, vp: Viewport): void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const c = canvas as any;
+  const c = canvas as unknown as Record<string, unknown>;
   if (typeof c.setViewport === 'function') {
-    c.setViewport(vp.x, vp.y, vp.zoom);
+    (c.setViewport as (x: number, y: number, z: number) => void)(vp.x, vp.y, vp.zoom);
   } else if (typeof c.zoomTo === 'function') {
-    // Obsidian Canvas API: zoomTo(x, y, zoom)
-    c.zoomTo(vp.x, vp.y, vp.zoom);
+    (c.zoomTo as (x: number, y: number, z: number) => void)(vp.x, vp.y, vp.zoom);
   } else {
     c.x = vp.x;
     c.y = vp.y;
@@ -74,36 +69,30 @@ function setViewport(canvas: CanvasRuntimeView, vp: Viewport): void {
   }
 }
 
-/** 通过 DOM 获取 Canvas 可视区域尺寸（更可靠） */
-function getCanvasViewportSize(): { w: number; h: number } {
-  // 方法 1: .canvas-wrapper（Obsidian 官方 class）
-  const wrapper = document.querySelector('.canvas-wrapper') as HTMLElement | null;
-  if (wrapper) {
-    const rect = wrapper.getBoundingClientRect();
-    if (rect.width > 200) return { w: rect.width, h: rect.height };
+/** 获取 Canvas 可视区域尺寸（通过 DOM 查询） */
+function getViewSize(): { w: number; h: number } {
+  // 按优先级查询 DOM 元素
+  const selectors = [
+    '.canvas-wrapper',
+    '.workspace-leaf.mod-active .view-content',
+    '.view-content',
+  ];
+  for (const sel of selectors) {
+    const el = document.querySelector(sel) as HTMLElement | null;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 200 && rect.height > 200) {
+        return { w: rect.width, h: rect.height };
+      }
+    }
   }
-  // 方法 2: .view-content
-  const vc = document.querySelector('.view-content') as HTMLElement | null;
-  if (vc) {
-    const rect = vc.getBoundingClientRect();
-    if (rect.width > 200) return { w: rect.width, h: rect.height };
-  }
-  // 方法 3: workspace-leaf
-  const leaf = document.querySelector('.workspace-leaf.mod-active .view-content') as HTMLElement | null;
-  if (leaf) {
-    const rect = leaf.getBoundingClientRect();
-    if (rect.width > 200) return { w: rect.width, h: rect.height };
-  }
-  // 兜底
   return { w: window.innerWidth - 280, h: window.innerHeight - 60 };
 }
 
 /** 计算"整棵树可见"的 viewport */
-function viewportForOverview(
-  canvas: CanvasRuntimeView,
-  nodeIds: string[],
-): Viewport {
-  if (nodeIds.length === 0) return getViewport(canvas);
+function calcOverview(canvas: CanvasRuntimeView, nodeIds: string[]): Viewport {
+  const current = getViewport(canvas);
+  if (nodeIds.length === 0) return current;
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   let found = false;
@@ -111,318 +100,263 @@ function viewportForOverview(
     const node = findNodeById(canvas, id);
     if (!node) continue;
     found = true;
-    const w = node.width || 400;
-    const h = node.height || 200;
     minX = Math.min(minX, node.x);
     minY = Math.min(minY, node.y);
-    maxX = Math.max(maxX, node.x + w);
-    maxY = Math.max(maxY, node.y + h);
+    maxX = Math.max(maxX, node.x + (node.width || 400));
+    maxY = Math.max(maxY, node.y + (node.height || 200));
   }
-
-  if (!found || !isFinite(minX)) return getViewport(canvas);
+  if (!found || !isFinite(minX)) return current;
 
   const treeW = maxX - minX;
   const treeH = maxY - minY;
-  const padding = 60;
+  const pad = 80;
+  const { w, h } = getViewSize();
 
-  const { w: viewW, h: viewH } = getCanvasViewportSize();
+  const zoom = Math.max(0.02, Math.min(
+    w / (treeW + pad * 2),
+    h / (treeH + pad * 2),
+  ));
 
-  const zoomW = viewW / (treeW + padding * 2);
-  const zoomH = viewH / (treeH + padding * 2);
-  // 不设上限（大树需要很小的 zoom），下限 0.02
-  const zoom = Math.max(0.02, Math.min(zoomW, zoomH));
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
 
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-
-  console.log(`[Canvas Branch Chat] Overview: tree=${treeW}x${treeH}, view=${viewW}x${viewH}, zoom=${zoom}`);
+  console.log(`[Canvas Branch Chat] calcOverview: tree=${Math.round(treeW)}x${Math.round(treeH)}, view=${Math.round(w)}x${Math.round(h)}, zoom=${zoom.toFixed(3)}`);
 
   return {
-    x: centerX - viewW / (2 * zoom),
-    y: centerY - viewH / (2 * zoom),
+    x: cx - w / (2 * zoom),
+    y: cy - h / (2 * zoom),
     zoom,
   };
 }
 
-/** 计算聚焦单个节点的 viewport */
-function viewportForNode(
-  node: CanvasRuntimeNode,
-  canvas: CanvasRuntimeView,
-): Viewport {
-  const nodeW = node.width || 400;
-  const nodeH = node.height || 200;
-  const { w: viewW, h: viewH } = getCanvasViewportSize();
+/** 计算"聚焦单个节点"的 viewport */
+function calcFocus(node: CanvasRuntimeNode): Viewport {
+  const nw = node.width || 400;
+  const nh = node.height || 200;
+  const { w, h } = getViewSize();
 
-  // 让节点占视口 75% 宽度
-  const zoomW = viewW * 0.75 / nodeW;
-  const zoomH = viewH * 0.75 / nodeH;
-  const zoom = Math.min(zoomW, zoomH, 2.0);
-
-  const centerX = node.x + nodeW / 2;
-  const centerY = node.y + nodeH / 2;
+  // 节点占视口 70%
+  const zoom = Math.min((w * 0.7) / nw, (h * 0.7) / nh, 2.5);
 
   return {
-    x: centerX - viewW / (2 * zoom),
-    y: centerY - viewH / (2 * zoom),
+    x: node.x + nw / 2 - w / (2 * zoom),
+    y: node.y + nh / 2 - h / (2 * zoom),
     zoom,
   };
 }
 
-/** 缓动动画过渡 viewport — 使用 Web Animations API 风格的手写帧循环 */
-function animateViewport(
-  canvas: CanvasRuntimeView,
-  from: Viewport,
-  to: Viewport,
-  durationMs: number,
-): Promise<void> {
+/** 缓动过渡 viewport */
+function animateViewport(canvas: CanvasRuntimeView, from: Viewport, to: Viewport, ms: number): Promise<void> {
   return new Promise((resolve) => {
-    const start = performance.now();
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
-
+    if (ms <= 0) { setViewport(canvas, to); resolve(); return; }
+    const t0 = performance.now();
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // easeOutCubic
     const tick = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(elapsed / durationMs, 1);
+      const t = Math.min((now - t0) / ms, 1);
       const e = ease(t);
       setViewport(canvas, {
         x: from.x + (to.x - from.x) * e,
         y: from.y + (to.y - from.y) * e,
         zoom: from.zoom + (to.zoom - from.zoom) * e,
       });
-      if (t < 1) {
-        window.requestAnimationFrame(tick);
-      } else {
-        resolve();
-      }
+      if (t < 1) requestAnimationFrame(tick);
+      else resolve();
     };
-    window.requestAnimationFrame(tick);
+    requestAnimationFrame(tick);
   });
 }
 
 // ============================================================
-// 节点高亮
-// ⚠️ 绝不触碰 .canvas-node 的 transform 属性！
-//    Obsidian 用它定位节点 (transform: translate(Xpx, Ypx))
-//    覆盖 transform 会导致所有节点跳到 (0,0) 堆叠
+// 节点视觉高亮（不碰 transform / 不碰 .canvas-node inline style 的 transform）
 // ============================================================
 
-function getNodeEl(node: CanvasRuntimeNode): HTMLElement | null {
-  return (node.contentEl?.closest('.canvas-node') as HTMLElement) || null;
+function nodeEl(node: CanvasRuntimeNode): HTMLElement | null {
+  return (node.contentEl?.closest('.canvas-node') as HTMLElement) ?? null;
 }
 
-function clearAllHighlights(canvas: CanvasRuntimeView) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const c = canvas as any;
-  const container = c.canvasEl || c.containerEl || c.contentEl || c.el;
-  if (!container || !container.findAll) return;
-  const all = container.findAll('.canvas-node') as HTMLElement[];
-  all.forEach((el) => {
-    el.removeClass('replay-played', 'replay-current', 'replay-pending');
-    // ⚠️ 绝不清 transform！
-    el.style.zIndex = '';
-    el.style.boxShadow = '';
-    el.style.transition = '';
-    el.style.opacity = '';
-    el.style.filter = '';
-  });
-}
-
-function highlightNode(
-  nodeId: string,
-  canvas: CanvasRuntimeView,
-  state: 'played' | 'current' | 'pending',
-) {
-  const node = findNodeById(canvas, nodeId);
-  if (!node) return;
-  const el = getNodeEl(node);
+function setHighlight(node: CanvasRuntimeNode, state: 'pending' | 'current' | 'played'): void {
+  const el = nodeEl(node);
   if (!el) return;
-  el.removeClass('replay-played', 'replay-current', 'replay-pending');
+  el.removeClass('replay-pending', 'replay-current', 'replay-played');
   el.addClass(`replay-${state}`);
 
   if (state === 'pending') {
-    el.style.opacity = '0.3';
-    el.style.filter = 'grayscale(0.6)';
+    el.style.opacity = '0.25';
+    el.style.filter = 'grayscale(0.7)';
     el.style.boxShadow = '';
-  } else if (state === 'played') {
-    el.style.opacity = '';
-    el.style.filter = '';
-    el.style.boxShadow = '0 0 0 2px var(--interactive-accent)';
+    el.style.zIndex = '';
   } else if (state === 'current') {
     el.style.opacity = '1';
     el.style.filter = '';
-    el.style.boxShadow = '0 0 0 3px var(--interactive-accent), 0 4px 20px rgba(0,0,0,0.2)';
+    el.style.boxShadow = '0 0 0 4px var(--interactive-accent), 0 8px 36px rgba(0,0,0,0.3)';
     el.style.zIndex = '100';
+  } else { // played
+    el.style.opacity = '0.55';
+    el.style.filter = '';
+    el.style.boxShadow = '0 0 0 2px var(--interactive-accent)';
+    el.style.zIndex = '';
   }
 }
 
-// ============================================================
-// 遍历顺序
-// ============================================================
-
-function traversalTime(canvas: CanvasRuntimeView, rootId: string): string[] {
-  const visited = new Set<string>();
-  const collected: { id: string; y: number }[] = [];
-
-  const collect = (nodeId: string) => {
-    if (visited.has(nodeId)) return;
-    visited.add(nodeId);
-    const node = findNodeById(canvas, nodeId);
-    if (!node) return;
-    const role = getNodeRole(node);
-    if (role === 'user' || role === 'assistant') {
-      collected.push({ id: nodeId, y: node.y });
-    }
-    for (const childId of findChildNodeIds(canvas, nodeId)) {
-      collect(childId);
-    }
-  };
-
-  collect(rootId);
-  collected.sort((a, b) => a.y - b.y);
-  return collected.map((c) => c.id);
+function clearAllStyles(canvas: CanvasRuntimeView): void {
+  const c = canvas as unknown as Record<string, unknown>;
+  const container = (c.canvasEl ?? c.containerEl ?? c.contentEl ?? c.el) as HTMLElement | undefined;
+  if (!container?.querySelectorAll) return;
+  const nodes = container.querySelectorAll('.canvas-node') as NodeListOf<HTMLElement>;
+  nodes.forEach((el) => {
+    el.removeClass('replay-pending', 'replay-current', 'replay-played');
+    el.style.opacity = '';
+    el.style.filter = '';
+    el.style.boxShadow = '';
+    el.style.zIndex = '';
+    // ⚠️ 绝不清 transform — Obsidian 用它定位节点
+  });
 }
 
-function traversalDepth(canvas: CanvasRuntimeView, rootId: string): string[] {
-  const visited = new Set<string>();
-  const result: string[] = [];
+// ============================================================
+// 遍历
+// ============================================================
 
-  const dfs = (nodeId: string) => {
-    if (visited.has(nodeId)) return;
-    visited.add(nodeId);
-    const node = findNodeById(canvas, nodeId);
+function findRootId(canvas: CanvasRuntimeView, startId: string): string {
+  let cur = startId;
+  for (;;) {
+    const parent = findParentNodeId(canvas, cur);
+    if (!parent) return cur;
+    cur = parent;
+  }
+}
+
+/** 时间线模式：所有对话节点按 y 排序 */
+function traverseTime(canvas: CanvasRuntimeView, rootId: string): string[] {
+  const seen = new Set<string>();
+  const items: { id: string; y: number }[] = [];
+  const walk = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const node = findNodeById(canvas, id);
     if (!node) return;
     const role = getNodeRole(node);
     if (role === 'user' || role === 'assistant') {
-      result.push(nodeId);
+      items.push({ id, y: node.y });
     }
-    for (const childId of findChildNodeIds(canvas, nodeId)) {
-      dfs(childId);
-    }
+    for (const child of findChildNodeIds(canvas, id)) walk(child);
   };
+  walk(rootId);
+  items.sort((a, b) => a.y - b.y);
+  return items.map((i) => i.id);
+}
 
+/** 深度优先模式：沿分支走到底 */
+function traverseDepth(canvas: CanvasRuntimeView, rootId: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  const dfs = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const node = findNodeById(canvas, id);
+    if (!node) return;
+    const role = getNodeRole(node);
+    if (role === 'user' || role === 'assistant') {
+      result.push(id);
+    }
+    for (const child of findChildNodeIds(canvas, id)) dfs(child);
+  };
   dfs(rootId);
   return result;
 }
 
-function findRoot(canvas: CanvasRuntimeView, nodeId: string): string {
-  let current = nodeId;
-  let parent = findParentNodeId(canvas, current);
-  while (parent) {
-    current = parent;
-    parent = findParentNodeId(canvas, current);
-  }
-  return current;
+// ============================================================
+// 控制条（fixed 定位，挂 body）
+// ============================================================
+
+interface ControlBar {
+  el: HTMLElement;
+  setProgress: (cur: number, total: number) => void;
+  setPaused: (paused: boolean) => void;
+  setMode: (mode: TraversalMode) => void;
+  destroy: () => void;
 }
 
-// ============================================================
-// 控制条 UI — fixed 定位，不受 Canvas transform 影响
-// ============================================================
-
-interface ControlBarCallbacks {
+function createControlBar(total: number, cb: {
   onTogglePause: () => void;
   onPrev: () => void;
   onNext: () => void;
   onExit: () => void;
-  onSetMode: (mode: TraversalMode) => void;
-  onSetSpeed: (speed: number) => void;
-}
+  onMode: (m: TraversalMode) => void;
+  onSpeed: (i: number) => void;
+}): ControlBar {
+  const el = document.body.createDiv({ cls: 'replay-bar' });
 
-function createControlBar(
-  totalNodes: number,
-  callbacks: ControlBarCallbacks,
-) {
-  const bar = document.body.createDiv({ cls: 'replay-control-bar' });
+  // 左：播放控制
+  const left = el.createDiv({ cls: 'replay-bar-left' });
+  const mkBtn = (icon: string, title: string, fn: () => void) => {
+    const b = left.createEl('button', { cls: 'replay-bar-btn' });
+    b.innerHTML = icon;
+    b.title = title;
+    b.addEventListener('click', fn);
+    return b;
+  };
+  const prevBtn = mkBtn('⏮', '上一个 (←)', cb.onPrev);
+  const playBtn = mkBtn('⏸', '暂停/继续 (空格)', cb.onTogglePause);
+  const nextBtn = mkBtn('⏭', '下一个 (→)', cb.onNext);
 
-  // 左侧：播放控制
-  const left = bar.createDiv({ cls: 'replay-controls-left' });
+  // 中：模式 + 速度
+  const mid = el.createDiv({ cls: 'replay-bar-mid' });
 
-  const prevBtn = left.createEl('button', { cls: 'replay-btn' });
-  prevBtn.innerHTML = '⏮';
-  prevBtn.title = '上一个 (←)';
+  const modeT = mid.createEl('button', { cls: 'replay-bar-mode replay-bar-mode-active' });
+  modeT.textContent = 'T 时间线';
+  modeT.title = '按时间顺序';
+  modeT.addEventListener('click', () => cb.onMode('time'));
 
-  const playBtn = left.createEl('button', { cls: 'replay-btn replay-play-btn' });
-  playBtn.innerHTML = '⏸';
-  playBtn.title = '暂停/继续 (空格)';
+  const modeD = mid.createEl('button', { cls: 'replay-bar-mode' });
+  modeD.textContent = 'D 深度优先';
+  modeD.title = '按分支深度';
+  modeD.addEventListener('click', () => cb.onMode('depth'));
 
-  const nextBtn = left.createEl('button', { cls: 'replay-btn' });
-  nextBtn.innerHTML = '⏭';
-  nextBtn.title = '下一个 (→)';
-
-  // 中间：模式 + 速度
-  const center = bar.createDiv({ cls: 'replay-controls-center' });
-
-  const modeTime = center.createEl('button', { cls: 'replay-mode-btn replay-mode-active' });
-  modeTime.innerHTML = 'T 时间线';
-  modeTime.title = '按时间顺序 (T)';
-
-  const modeDepth = center.createEl('button', { cls: 'replay-mode-btn' });
-  modeDepth.innerHTML = 'D 深度优先';
-  modeDepth.title = '按分支深度 (D)';
-
-  const speedWrap = center.createDiv({ cls: 'replay-speed-wrap' });
-  const speedBtn = speedWrap.createEl('button', { cls: 'replay-speed-btn' });
-  speedBtn.innerHTML = '⏱ 中';
-  speedBtn.title = '播放速度';
-
-  const speedMenu = speedWrap.createDiv({ cls: 'replay-speed-dropdown' });
-  SPEED_PRESETS.forEach((preset, i) => {
-    const item = speedMenu.createEl('button', { cls: 'replay-speed-option' });
-    item.innerHTML = preset.label;
-    item.addEventListener('click', () => {
-      speedBtn.innerHTML = `⏱ ${preset.label}`;
-      callbacks.onSetSpeed(i);
-      speedMenu.removeClass('replay-speed-show');
+  // 速度选择
+  const speedWrap = mid.createDiv({ cls: 'replay-bar-speed-wrap' });
+  const speedBtn = speedWrap.createEl('button', { cls: 'replay-bar-speed' });
+  speedBtn.textContent = '⏱ 中';
+  const speedDrop = speedWrap.createDiv({ cls: 'replay-bar-speed-drop' });
+  SPEEDS.forEach((s, i) => {
+    const opt = speedDrop.createEl('button', { cls: 'replay-bar-speed-opt' });
+    opt.textContent = s.label;
+    opt.addEventListener('click', () => {
+      speedBtn.textContent = `⏱ ${s.label}`;
+      cb.onSpeed(i);
+      speedDrop.removeClass('show');
     });
   });
   speedBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    speedMenu.classList.toggle('replay-speed-show');
+    speedDrop.classList.toggle('show');
   });
-
-  const docClick = (e: MouseEvent) => {
-    if (!speedWrap.contains(e.target as Node)) {
-      speedMenu.removeClass('replay-speed-show');
-    }
+  const closeDrop = (e: MouseEvent) => {
+    if (!speedWrap.contains(e.target as Node)) speedDrop.removeClass('show');
   };
-  document.addEventListener('click', docClick);
+  document.addEventListener('click', closeDrop);
 
-  // 右侧：进度 + 退出
-  const right = bar.createDiv({ cls: 'replay-controls-right' });
+  // 右：进度 + 退出
+  const right = el.createDiv({ cls: 'replay-bar-right' });
+  const progress = right.createSpan({ cls: 'replay-bar-progress' });
+  progress.textContent = `1/${total}`;
 
-  const progress = right.createDiv({ cls: 'replay-progress' });
-  const progressText = progress.createSpan({ cls: 'replay-progress-text', text: `1/${totalNodes}` });
-
-  const exitBtn = right.createEl('button', { cls: 'replay-btn replay-exit-btn' });
-  exitBtn.innerHTML = '✕ 退出';
+  const exitBtn = right.createEl('button', { cls: 'replay-bar-exit' });
+  exitBtn.textContent = '✕ 退出';
   exitBtn.title = '退出回放 (Esc)';
-
-  // Bind events
-  prevBtn.addEventListener('click', callbacks.onPrev);
-  playBtn.addEventListener('click', callbacks.onTogglePause);
-  nextBtn.addEventListener('click', callbacks.onNext);
-  exitBtn.addEventListener('click', callbacks.onExit);
-  modeTime.addEventListener('click', () => callbacks.onSetMode('time'));
-  modeDepth.addEventListener('click', () => callbacks.onSetMode('depth'));
+  exitBtn.addEventListener('click', cb.onExit);
 
   return {
-    bar,
-    playBtn,
-    progressText,
-    modeTime,
-    modeDepth,
-    speedBtn,
-    updateProgress: (current: number) => {
-      progressText.setText(`${current + 1}/${totalNodes}`);
-    },
-    updatePlayBtn: (paused: boolean) => {
-      playBtn.innerHTML = paused ? '▶' : '⏸';
-    },
-    updateMode: (mode: TraversalMode) => {
-      modeTime.toggleClass('replay-mode-active', mode === 'time');
-      modeDepth.toggleClass('replay-mode-active', mode === 'depth');
+    el,
+    setProgress: (cur, t) => { progress.textContent = `${cur + 1}/${t}`; },
+    setPaused: (paused) => { playBtn.innerHTML = paused ? '▶' : '⏸'; },
+    setMode: (mode) => {
+      modeT.toggleClass('replay-bar-mode-active', mode === 'time');
+      modeD.toggleClass('replay-bar-mode-active', mode === 'depth');
     },
     destroy: () => {
-      document.removeEventListener('click', docClick);
-      bar.remove();
+      document.removeEventListener('click', closeDrop);
+      el.remove();
     },
   };
 }
@@ -434,272 +368,227 @@ function createControlBar(
 export class ReplayController {
   private canvas: CanvasRuntimeView;
   private startNodeId: string;
-  private nodeIds: string[] = [];
-  private currentIndex: number = 0;
   private mode: TraversalMode = 'time';
-  private speedIndex: number = 1;
-  private paused: boolean = false;
-  private cancelled: boolean = false;
-  private controlBar: ReturnType<typeof createControlBar> | null = null;
-  private savedViewport: Viewport | null = null;
-  private onKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private speedIdx = 1;
+  private paused = false;
+  private cancelled = false;
+  private nodeIds: string[] = [];
+  private idx = 0;
+  private savedVp: Viewport | null = null;
+  private bar: ControlBar | null = null;
+  private keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(canvas: CanvasRuntimeView, startNodeId: string) {
     this.canvas = canvas;
     this.startNodeId = startNodeId;
   }
 
-  async start() {
+  async start(): Promise<void> {
     try {
-      await this._start();
+      await this.run();
     } catch (err) {
       console.error('[Canvas Branch Chat] Replay error:', err);
       new Notice(`❌ 回放出错: ${err instanceof Error ? err.message : String(err)}`);
-      this.cleanup();
+      this.teardown();
     }
   }
 
-  private async _start() {
-    const rootId = findRoot(this.canvas, this.startNodeId);
-    this.rebuildTraversal();
-
+  private async run(): Promise<void> {
+    const rootId = findRootId(this.canvas, this.startNodeId);
+    this.rebuild();
     if (this.nodeIds.length === 0) {
       new Notice('没有可回放的对话节点');
       return;
     }
 
-    console.log(
-      `[Canvas Branch Chat] 🎬 Replay: ${this.nodeIds.length} nodes, mode=${this.mode}`,
-      'ids:', this.nodeIds.slice(0, 5), '...',
-    );
+    console.log(`[Canvas Branch Chat] 🎬 Replay: ${this.nodeIds.length} nodes, mode=${this.mode}`);
 
-    // 1. 保存原 viewport
-    this.savedViewport = getViewport(this.canvas);
+    // 保存原 viewport
+    this.savedVp = getViewport(this.canvas);
 
-    // 2. 创建控制条 — 挂到 body，用 fixed 定位
-    this.controlBar = createControlBar(this.nodeIds.length, {
+    // 创建控制条
+    this.bar = createControlBar(this.nodeIds.length, {
       onTogglePause: () => this.togglePause(),
       onPrev: () => this.prev(),
       onNext: () => this.next(),
       onExit: () => this.cancel(),
-      onSetMode: (mode) => this.setMode(mode),
-      onSetSpeed: (speed) => this.setSpeed(speed),
+      onMode: (m) => this.changeMode(m),
+      onSpeed: (i) => { this.speedIdx = i; },
     });
 
-    // 3. 注册键盘
-    this.registerKeyboard();
+    // 键盘
+    this.bindKeys();
 
-    // 4. 标记所有节点 pending
+    // 标记所有 pending
     for (const id of this.nodeIds) {
-      highlightNode(id, this.canvas, 'pending');
+      const n = findNodeById(this.canvas, id);
+      if (n) setHighlight(n, 'pending');
     }
 
-    const config = this.getConfig();
+    const sp = SPEEDS[this.speedIdx];
 
-    // 5. 阶段 1: 全局总览
-    const overviewVp = viewportForOverview(this.canvas, this.nodeIds);
-    console.log('[Canvas Branch Chat] Overview:', JSON.stringify(overviewVp));
-    await animateViewport(this.canvas, this.savedViewport, overviewVp, config.zoomMs);
-    if (this.cancelled) { this.cleanup(); return; }
-    await this.interruptibleDelay(config.overviewMs);
-    if (this.cancelled) { this.cleanup(); return; }
+    // 阶段 1: 全局总览
+    const overviewVp = calcOverview(this.canvas, this.nodeIds);
+    console.log('[Canvas Branch Chat] overview:', JSON.stringify(overviewVp));
+    await animateViewport(this.canvas, this.savedVp, overviewVp, sp.zoomMs);
+    if (this.guard()) return;
+    await this.delay(sp.overviewMs);
+    if (this.guard()) return;
 
-    // 6. 阶段 2: 逐节点 focus → 回到总览 → 标记 played
-    for (this.currentIndex = 0; this.currentIndex < this.nodeIds.length; this.currentIndex++) {
+    // 阶段 2: 逐节点
+    for (this.idx = 0; this.idx < this.nodeIds.length; this.idx++) {
       if (this.cancelled) break;
 
-      const nodeId = this.nodeIds[this.currentIndex];
-      const node = findNodeById(this.canvas, nodeId);
+      const node = findNodeById(this.canvas, this.nodeIds[this.idx]);
       if (!node) continue;
 
-      this.controlBar?.updateProgress(this.currentIndex);
+      this.bar?.setProgress(this.idx, this.nodeIds.length);
+      setHighlight(node, 'current');
 
-      // 6a. 标记当前
-      highlightNode(nodeId, this.canvas, 'current');
-
-      // 6b. 动画 zoom 到当前节点
-      const nodeVp = viewportForNode(node, this.canvas);
-      await animateViewport(this.canvas, overviewVp, nodeVp, config.zoomMs);
+      // zoom 到节点
+      const focusVp = calcFocus(node);
+      await animateViewport(this.canvas, overviewVp, focusVp, sp.zoomMs);
       if (this.cancelled) break;
 
-      // 6c. 停留阅读
-      await this.interruptibleDelay(config.dwellMs);
+      // 停留阅读
+      await this.delay(sp.dwellMs);
       if (this.cancelled) break;
 
-      // 6d. 动画 zoom 回总览
-      await animateViewport(this.canvas, nodeVp, overviewVp, config.zoomMs);
+      // zoom 回总览
+      await animateViewport(this.canvas, focusVp, overviewVp, sp.zoomMs);
       if (this.cancelled) break;
 
-      // 6e. 标记已播放
-      highlightNode(nodeId, this.canvas, 'played');
+      setHighlight(node, 'played');
     }
 
-    // 7. 完成
-    this.finish();
+    // 阶段 3: 结束还原
+    if (!this.cancelled) {
+      console.log('[Canvas Branch Chat] 🎬 Replay finished');
+    }
+    this.teardown();
   }
 
-  // ============================================================
-  // 用户控制
-  // ============================================================
+  /** true = 应提前退出 */
+  private guard(): boolean {
+    return this.cancelled;
+  }
 
-  private togglePause() {
+  // ── 用户控制 ──
+
+  private togglePause(): void {
     this.paused = !this.paused;
-    this.controlBar?.updatePlayBtn(this.paused);
+    this.bar?.setPaused(this.paused);
   }
 
-  private prev() {
-    if (this.currentIndex > 0) {
-      const curId = this.nodeIds[this.currentIndex];
-      const curNode = findNodeById(this.canvas, curId);
-      // 标记当前为 pending
-      if (curId) highlightNode(curId, this.canvas, 'pending');
-      this.currentIndex -= 2;
+  private prev(): void {
+    if (this.idx > 0) {
+      const n = findNodeById(this.canvas, this.nodeIds[this.idx]);
+      if (n) setHighlight(n, 'pending');
+      this.idx -= 2; // for 循环会 +1，所以 -2 回到上一个
     }
   }
 
-  private next() {
+  private next(): void {
     this.paused = false;
   }
 
-  private cancel() {
+  private cancel(): void {
     this.cancelled = true;
     this.paused = false;
   }
 
-  private setMode(mode: TraversalMode) {
-    if (this.mode === mode) return;
-    this.mode = mode;
-    this.controlBar?.updateMode(mode);
-
-    const currentNode = this.nodeIds[this.currentIndex];
-    this.rebuildTraversal();
-    const newIdx = this.nodeIds.indexOf(currentNode);
-    if (newIdx >= 0) this.currentIndex = newIdx;
+  private changeMode(m: TraversalMode): void {
+    if (this.mode === m) return;
+    this.mode = m;
+    this.bar?.setMode(m);
+    const cur = this.nodeIds[this.idx];
+    this.rebuild();
+    const newIdx = this.nodeIds.indexOf(cur);
+    if (newIdx >= 0) this.idx = newIdx;
   }
 
-  private setSpeed(speed: number) {
-    this.speedIndex = speed;
-  }
-
-  private getConfig(): ReplayConfig {
-    const preset = SPEED_PRESETS[this.speedIndex] || SPEED_PRESETS[1];
-    return {
-      dwellMs: preset.dwellMs,
-      overviewMs: preset.overviewMs,
-      zoomMs: preset.zoomMs,
-    };
-  }
-
-  private rebuildTraversal() {
-    const rootId = findRoot(this.canvas, this.startNodeId);
+  private rebuild(): void {
+    const root = findRootId(this.canvas, this.startNodeId);
     this.nodeIds = this.mode === 'time'
-      ? traversalTime(this.canvas, rootId)
-      : traversalDepth(this.canvas, rootId);
-    console.log(`[Canvas Branch Chat] Traversal: ${this.nodeIds.length} nodes, mode=${this.mode}`);
+      ? traverseTime(this.canvas, root)
+      : traverseDepth(this.canvas, root);
   }
 
-  // ============================================================
-  // 延迟（支持暂停 + 取消）
-  // ============================================================
+  // ── 可中断延迟 ──
 
-  private interruptibleDelay(ms: number): Promise<void> {
-    if (ms <= 0) return Promise.resolve();
+  private delay(ms: number): Promise<void> {
     return new Promise((resolve) => {
       const check = () => {
         if (this.cancelled) { resolve(); return; }
-        if (this.paused) {
-          window.setTimeout(check, 100);
-        } else {
-          window.setTimeout(resolve, ms);
-        }
+        if (this.paused) { setTimeout(check, 100); return; }
+        setTimeout(resolve, ms);
       };
-      window.setTimeout(check, 100);
+      setTimeout(check, 50);
     });
   }
 
-  // ============================================================
-  // 键盘
-  // ============================================================
+  // ── 键盘 ──
 
-  private registerKeyboard() {
-    this.onKeyDown = (e: KeyboardEvent) => {
-      // 不在输入框中处理（避免影响编辑）
-      if ((e.target as HTMLElement)?.tagName === 'INPUT' ||
-          (e.target as HTMLElement)?.tagName === 'TEXTAREA' ||
-          (e.target as HTMLElement)?.contentEditable === 'true') {
-        return;
-      }
+  private bindKeys(): void {
+    this.keyHandler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if ((e.target as HTMLElement)?.contentEditable === 'true') return;
+
       switch (e.key) {
         case ' ':
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();
           this.togglePause();
           break;
         case 'Escape':
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();
           this.cancel();
           break;
         case 'ArrowLeft':
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();
           this.prev();
           break;
         case 'ArrowRight':
-          e.preventDefault();
-          e.stopPropagation();
+          e.preventDefault(); e.stopPropagation();
           this.next();
           break;
-        case 't':
-        case 'T':
-          this.setMode('time');
+        case 't': case 'T':
+          this.changeMode('time');
           break;
-        case 'd':
-        case 'D':
-          this.setMode('depth');
+        case 'd': case 'D':
+          this.changeMode('depth');
           break;
       }
     };
-    document.addEventListener('keydown', this.onKeyDown, true);
+    document.addEventListener('keydown', this.keyHandler, true); // capture phase
   }
 
-  private unregisterKeyboard() {
-    if (this.onKeyDown) {
-      document.removeEventListener('keydown', this.onKeyDown, true);
-      this.onKeyDown = null;
+  private unbindKeys(): void {
+    if (this.keyHandler) {
+      document.removeEventListener('keydown', this.keyHandler, true);
+      this.keyHandler = null;
     }
   }
 
-  // ============================================================
-  // 结束 / 清理
-  // ============================================================
+  // ── 清理 ──
 
-  private finish() {
-    console.log('[Canvas Branch Chat] 🎬 Replay finished');
-    if (this.savedViewport) {
-      const currentVp = getViewport(this.canvas);
-      void animateViewport(this.canvas, currentVp, this.savedViewport, 500);
+  private teardown(): void {
+    this.unbindKeys();
+    clearAllStyles(this.canvas);
+    this.bar?.destroy();
+    this.bar = null;
+
+    // 还原 viewport
+    if (this.savedVp) {
+      const cur = getViewport(this.canvas);
+      void animateViewport(this.canvas, cur, this.savedVp, 400).then(() => {
+        this.canvas.requestSave();
+      });
     }
-    this.cleanup();
   }
 
-  private cleanup() {
-    this.unregisterKeyboard();
-    clearAllHighlights(this.canvas);
-    if (this.controlBar) {
-      this.controlBar.destroy();
-      this.controlBar = null;
-    }
-    this.canvas.requestSave();
-  }
-
-  destroy() {
-    this.cancelled = true;
-    this.paused = false;
-    this.cleanup();
-    if (this.savedViewport) {
-      setViewport(this.canvas, this.savedViewport);
-      this.canvas.requestSave();
-    }
+  destroy(): void {
+    this.cancel();
+    this.teardown();
   }
 }

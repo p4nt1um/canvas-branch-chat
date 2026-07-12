@@ -184,62 +184,47 @@
 }
 
 /* ============================================================ */
-/* P2 #14: 对话回放样式                                           */
+/* P2 #14: 对话回放                                              */
 /* ============================================================ */
 
-/* 节点高亮状态 */
-
-.replay-played {
-  /* box-shadow 由 JS 直接设置 */
-}
-
-.replay-current {
-  /* box-shadow 由 JS 直接设置 */
-}
-
-.replay-pending {
-  /* opacity/filter 由 JS 直接设置 */
-}
-
-/* 控制条 — fixed 定位在屏幕顶部，不受 Canvas transform 影响 */
-
-.replay-control-bar {
+/* 控制条 — fixed 定位，屏幕顶部居中 */
+.replay-bar {
   position: fixed;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 16px;
+  gap: 10px;
+  padding: 5px 14px;
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
   border-top: none;
-  border-radius: 0 0 10px 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
   z-index: 100000;
   font-size: 13px;
 }
 
-.replay-controls-left,
-.replay-controls-center,
-.replay-controls-right {
+.replay-bar-left,
+.replay-bar-mid,
+.replay-bar-right {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.replay-controls-center {
+.replay-bar-mid {
   border-left: 1px solid var(--background-modifier-border);
   border-right: 1px solid var(--background-modifier-border);
-  padding: 0 12px;
+  padding: 0 10px;
 }
 
-.replay-btn {
+.replay-bar-btn {
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
-  padding: 4px 8px;
+  padding: 3px 8px;
   cursor: pointer;
   font-size: 14px;
   min-width: 32px;
@@ -247,56 +232,44 @@
   color: var(--text-normal);
 }
 
-.replay-btn:hover {
+.replay-bar-btn:hover {
   background: var(--background-modifier-hover);
 }
 
-.replay-play-btn {
-  min-width: 40px;
-  font-size: 16px;
-}
-
-/* 模式切换按钮 */
-
-.replay-mode-btn {
+.replay-bar-mode {
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
-  padding: 3px 10px;
+  padding: 3px 8px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-muted);
-  transition: all 0.15s ease;
 }
 
-.replay-mode-btn:hover {
+.replay-bar-mode:hover {
   background: var(--background-modifier-hover);
 }
 
-.replay-mode-active {
+.replay-bar-mode-active {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
   border-color: var(--interactive-accent);
 }
 
-/* 速度下拉 */
-
-.replay-speed-wrap {
+.replay-bar-speed-wrap {
   position: relative;
-  margin-left: 4px;
 }
 
-.replay-speed-btn {
+.replay-bar-speed {
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
-  padding: 3px 10px;
+  padding: 3px 8px;
   cursor: pointer;
   font-size: 12px;
-  color: var(--text-normal);
 }
 
-.replay-speed-dropdown {
+.replay-bar-speed-drop {
   display: none;
   position: absolute;
   bottom: 100%;
@@ -305,44 +278,45 @@
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   overflow: hidden;
 }
 
-.replay-speed-dropdown.replay-speed-show {
+.replay-bar-speed-drop.show {
   display: block;
 }
 
-.replay-speed-option {
+.replay-bar-speed-opt {
   display: block;
   width: 100%;
-  padding: 4px 16px;
+  padding: 4px 14px;
   background: none;
   border: none;
   cursor: pointer;
   font-size: 12px;
-  color: var(--text-normal);
   text-align: left;
 }
 
-.replay-speed-option:hover {
+.replay-bar-speed-opt:hover {
   background: var(--background-modifier-hover);
 }
 
-/* 右侧 */
-
-.replay-progress {
+.replay-bar-progress {
   color: var(--text-muted);
   font-size: 12px;
   white-space: nowrap;
 }
 
-.replay-exit-btn {
+.replay-bar-exit {
   background: var(--background-modifier-error);
   color: var(--text-on-accent);
-  border-color: var(--background-modifier-error);
+  border: 1px solid var(--background-modifier-error);
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
 }
 
-.replay-exit-btn:hover {
+.replay-bar-exit:hover {
   opacity: 0.85;
 }
