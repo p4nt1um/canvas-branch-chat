@@ -1,6 +1,14 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+
+// Obsidian community plugin linter 要求不使用 builtin-modules 包
+// 直接列出 Node.js 内置模块
+const OBSIDIAN_BUILTIN_MODULES = [
+	"assert", "child_process", "cluster", "crypto", "dgram", "dns", "domain",
+	"events", "fs", "http", "https", "net", "os", "path", "punycode",
+	"querystring", "readline", "stream", "string_decoder", "timers", "tls",
+	"tty", "url", "util", "v8", "vm", "zlib",
+];
 
 const banner =
 `/*
@@ -31,7 +39,7 @@ const context = await esbuild.context({
 		"@lezer/common",
 		"@lezer/highlight",
 		"@lezer/lr",
-		...builtins],
+		...OBSIDIAN_BUILTIN_MODULES],
 	format: "cjs",
 	target: "es2018",
 	logLevel: "info",

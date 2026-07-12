@@ -12,11 +12,11 @@
 
 import { Menu, MenuItem, Notice } from 'obsidian';
 import CanvasBranchChatPlugin from './main';
-import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig, BRANCH_COLOR_PALETTE } from './types';
+import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, ModelConfig, BRANCH_COLOR_PALETTE, ChatNodeData } from './types';
 import { createProvider } from './providers';
 import { getNodeScrollHeight, generateId, truncateText } from './utils';
 import { BranchModal, BranchDirection } from './branch-modal';
-import { buildBranchContext, buildContextFromChain, buildMergeContext, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findChildNodeIds, findNodeById, getNodeText } from './context';
+import { buildBranchContext, buildContextFromChain, buildMergeContext, getAncestorChain, getNodeRole, setNodeRole, setNodeColor, setNodeMetadata, findNodeById } from './context';
 import { exportCanvasConversation } from './export';
 import { parseSkillTag } from './skill-scanner';
 import { MergeModal } from './merge-modal';
@@ -33,18 +33,19 @@ export default class CanvasBranchExtension {
         'canvas:node-menu',
         ((menu: Menu, node: CanvasRuntimeNode) => {
           this.onNodeMenu(menu, node);
-        }) as any
+        }) as unknown as (...args: unknown[]) => void
       )
     );
 
     // P2 #13: 尝试注册多选菜单事件
     // Obsidian Canvas 内部可能有 'canvas:selection-menu' 事件
     this.plugin.registerEvent(
-      this.plugin.app.workspace.on(
-        'canvas:selection-menu' as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (this.plugin.app.workspace as any).on(
+        'canvas:selection-menu',
         ((menu: Menu, canvas: CanvasRuntimeView) => {
           this.onSelectionMenu(menu, canvas);
-        }) as any
+        })
       )
     );
   }
@@ -156,7 +157,7 @@ export default class CanvasBranchExtension {
               new Notice('请至少选择 2 个节点进行合并');
               return;
             }
-            this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
+            void this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
           },
           selectedNodes.map(n => n.id),
         ).open();
@@ -333,7 +334,7 @@ export default class CanvasBranchExtension {
         if (allQuestions.length === 0) return;
 
         const customInstructions = this.plugin.settings.getSettings().customInstructions;
-        const branchColor = (sourceNode.getData() as any)?.chatBranchColor;
+        const branchColor = (sourceNode.getData() as ChatNodeData)?.chatBranchColor;
 
         // P2 #22: 多问题时，从源节点横向排列；单问题时纵向排列
         const isMulti = allQuestions.length > 1;
@@ -504,10 +505,10 @@ export default class CanvasBranchExtension {
     canvasData.edges.push({
       id: generateId(16),
       fromNode: fromNodeId,
-      fromSide: fromSide as any,
+      fromSide: fromSide as 'bottom' | 'top' | 'left' | 'right',
       fromEnd: 'none',
       toNode: toNodeId,
-      toSide: toSide as any,
+      toSide: toSide as 'bottom' | 'top' | 'left' | 'right',
       toEnd: 'arrow',
       label: label || undefined,
       color: color || undefined,
@@ -547,7 +548,11 @@ export default class CanvasBranchExtension {
 
   /** 获取 Canvas 中当前选中的节点列表 */
   private getSelectedNodes(canvas: CanvasRuntimeView): CanvasRuntimeNode[] {
-    const internalCanvas = canvas as any;
+    const internalCanvas = canvas as unknown as {
+      selection?: Set<CanvasRuntimeNode> | Map<string, CanvasRuntimeNode> | CanvasRuntimeNode[];
+      nodes?: Map<string, CanvasRuntimeNode> | Record<string, CanvasRuntimeNode>;
+      _nodes?: Map<string, CanvasRuntimeNode> | Record<string, CanvasRuntimeNode>;
+    };
 
     // Method 1: canvas.selection (Set/Map/Array)
     if (internalCanvas.selection) {
@@ -563,7 +568,7 @@ export default class CanvasBranchExtension {
       const allNodes = nodesMap instanceof Map
         ? Array.from(nodesMap.values())
         : Object.values(nodesMap);
-      return allNodes.filter((n: any) => n.isSelected);
+      return allNodes.filter((n: CanvasRuntimeNode & { isSelected: boolean }) => n.isSelected);
     }
 
     return [];
@@ -589,7 +594,7 @@ export default class CanvasBranchExtension {
           new Notice('请至少选择 2 个节点进行合并');
           return;
         }
-        this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
+        void this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
       },
     ).open();
   }
@@ -646,7 +651,7 @@ export default class CanvasBranchExtension {
 
     // 连线：每个源节点 → 汇总节点
     for (const srcNode of sourceNodes) {
-      const bColor = (srcNode.getData() as any)?.chatBranchColor;
+      const bColor = (srcNode.getData() as ChatNodeData)?.chatBranchColor;
       this.addEdge(canvas, srcNode.id, summaryNode.id, 'bottom', 'top', undefined, bColor);
     }
 

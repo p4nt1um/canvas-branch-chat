@@ -60,6 +60,23 @@
   font-family: var(--font-monospace);
 }
 
+/* 宽度 100% 输入框（替代 style 直接赋值） */
+.setting-wide-input {
+  width: 100%;
+}
+
+.setting-min-height-80 {
+  min-height: 80px;
+}
+
+.setting-min-height-60 {
+  min-height: 60px;
+}
+
+.setting-hidden {
+  display: none;
+}
+
 /* Branch Modal 提示文字 */
 .branch-modal-hint {
   color: var(--text-muted);

@@ -8,7 +8,8 @@
  */
 
 import { App, Notice, TFile, normalizePath } from 'obsidian';
-import { CanvasRuntimeView, CanvasRuntimeNode } from './types';
+import type { CanvasTextData } from 'obsidian/canvas';
+import { CanvasRuntimeView } from './types';
 import { findNodeById, findChildNodeIds, getNodeRole, getNodeText, findParentNodeId } from './context';
 
 // ============================================================
@@ -56,12 +57,15 @@ function getEdgeLabel(canvas: CanvasRuntimeView, fromNode: string, toNode: strin
 /** 从 canvas 原始数据读取节点类型和文件路径 */
 function getNodeFileInfo(canvas: CanvasRuntimeView, nodeId: string): { type: NodeType; filePath?: string } {
   const data = canvas.getData();
-  const raw = data.nodes.find((n: any) => n.id === nodeId);
+  const raw = data.nodes.find((n: CanvasTextData) => n.id === nodeId);
   if (!raw) return { type: 'unknown' };
 
   const type = (raw.type || 'text') as string;
-  if (type === 'file' && raw.file) {
-    return { type: 'file', filePath: raw.file as string };
+  if (type === 'file') {
+    const fileRaw = raw as unknown as { file?: string };
+    if (fileRaw.file) {
+      return { type: 'file', filePath: fileRaw.file };
+    }
   }
   return { type: type as NodeType };
 }
@@ -69,8 +73,8 @@ function getNodeFileInfo(canvas: CanvasRuntimeView, nodeId: string): { type: Nod
 /** 读取节点关联的模型别名 */
 function getNodeModelAlias(canvas: CanvasRuntimeView, nodeId: string): string | undefined {
   const data = canvas.getData();
-  const raw = data.nodes.find((n: any) => n.id === nodeId);
-  return raw?.modelAlias || undefined;
+  const raw = data.nodes.find((n: CanvasTextData) => n.id === nodeId);
+  return (raw as { modelAlias?: string })?.modelAlias || undefined;
 }
 
 /** 递归构建对话树 */
@@ -100,7 +104,7 @@ function buildTree(canvas: CanvasRuntimeView, nodeId: string, visited: Set<strin
   return {
     nodeId,
     type: fileInfo.type,
-    role: role as any,
+    role: role as 'user' | 'assistant' | 'branch-point' | 'unknown',
     text,
     filePath: fileInfo.filePath,
     modelAlias,
@@ -247,19 +251,19 @@ export function exportCanvasConversation(
 
   const folderObj = app.vault.getAbstractFileByPath(folder);
   if (!folderObj) {
-    app.vault.createFolder(folder).catch(() => {});
+    void app.vault.createFolder(folder).catch(() => {});
   }
 
   const existing = app.vault.getAbstractFileByPath(filePath);
   if (existing instanceof TFile) {
-    app.vault.modify(existing, markdown).then(() => {
+    void app.vault.modify(existing, markdown).then(() => {
       new Notice(`✅ 已更新: ${filePath}`);
-      app.workspace.openLinkText(filePath, '', true);
+      void app.workspace.openLinkText(filePath, '', true);
     });
   } else {
-    app.vault.create(filePath, markdown).then(() => {
+    void app.vault.create(filePath, markdown).then(() => {
       new Notice(`✅ 已导出: ${filePath}`);
-      app.workspace.openLinkText(filePath, '', true);
+      void app.workspace.openLinkText(filePath, '', true);
     }).catch(err => {
       new Notice(`❌ 导出失败: ${err}`);
     });

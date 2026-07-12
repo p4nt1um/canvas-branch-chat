@@ -5,6 +5,7 @@
  * 支持所有 OpenAI 兼容协议的服务（DeepSeek / OpenAI / Ollama / 自定义端点）。
  */
 
+import { requestUrl } from 'obsidian';
 import { ChatRequest, StreamCallback, ModelConfig, ChatProvider } from '../types';
 
 export class OpenAIProvider implements ChatProvider {
@@ -47,6 +48,7 @@ export class OpenAIProvider implements ChatProvider {
     let fullText = '';
 
     try {
+      // eslint-disable-next-line no-restricted-globals
       const response = await fetch(this.model.baseUrl, {
         method: 'POST',
         headers: {
@@ -62,7 +64,7 @@ export class OpenAIProvider implements ChatProvider {
         let errorDetail = `${response.status} ${response.statusText}`;
         try {
           const errorBody = await response.text();
-          const errorJson = JSON.parse(errorBody);
+          const errorJson = JSON.parse(errorBody) as { error?: { message?: string } };
           if (errorJson.error?.message) {
             errorDetail += `: ${errorJson.error.message}`;
           } else {
@@ -98,7 +100,9 @@ export class OpenAIProvider implements ChatProvider {
           if (data === '[DONE]') continue;
 
           try {
-            const parsed = JSON.parse(data);
+            const parsed = JSON.parse(data) as {
+              choices?: Array<{ delta?: { content?: string } }>;
+            };
             const token = parsed.choices?.[0]?.delta?.content;
             if (token) {
               fullText += token;
@@ -109,8 +113,8 @@ export class OpenAIProvider implements ChatProvider {
           }
         }
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         return fullText;
       }
       throw error;
@@ -138,22 +142,20 @@ export class OpenAIProvider implements ChatProvider {
         .replace('/chat/completions', '/models')
         .replace('/v1/chat/completions', '/v1/models');
 
-      const response = await fetch(modelsUrl, {
+      const response = await requestUrl({
+        url: modelsUrl,
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${this.apiKey}`,
         },
       });
 
-      if (!response.ok) {
-        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}` };
-      }
-
-      const data = await response.json();
-      const models = data?.data?.map((m: any) => m.id) || [];
+      const data = response.json;
+      const models: string[] = data?.data?.map((m: { id: string }) => m.id) || [];
       return { ok: true, models };
-    } catch (error: any) {
-      return { ok: false, error: error.message || '连接失败' };
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : '连接失败';
+      return { ok: false, error: msg };
     }
   }
 }

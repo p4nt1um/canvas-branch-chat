@@ -53,19 +53,18 @@ export class FollowUpModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl('h2', { text: '💬 继续追问' });
+    new Setting(contentEl).setName('💬 继续追问').setHeading();
 
     // 输入框
     new Setting(contentEl)
       .setDesc('基于当前对话上下文，输入你的追问')
       .addTextArea((text) => {
         text.setPlaceholder('输入追问内容...');
-        text.inputEl.style.width = '100%';
-        text.inputEl.style.minHeight = '80px';
+        text.inputEl.addClass('setting-wide-input', 'setting-min-height-80');
         text.onChange((value) => {
           this.prompt = value;
         });
-        setTimeout(() => text.inputEl.focus(), 50);
+        window.setTimeout(() => text.inputEl.focus(), 50);
       });
 
     // 智能追问按钮
@@ -79,7 +78,7 @@ export class FollowUpModal extends Modal {
 
     // 候选问题列表容器（初始隐藏，点击后展开）
     this.candidateListEl = contentEl.createDiv({ cls: 'follow-up-candidates' });
-    this.candidateListEl.style.display = 'none';
+    this.candidateListEl.addClass('setting-hidden');
 
     // 模型选择
     if (this.models.length > 0) {
@@ -203,6 +202,7 @@ export class FollowUpModal extends Modal {
     const model = this.models.find(m => m.id === this.modelId) || this.models[0];
     if (!model) return [];
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const apiKey = (this.canvas as any)?.plugin?.settings?.resolveApiKey?.(model)
       || process.env[model.apiKeyEnvVar];
     if (!apiKey) return [];
@@ -241,7 +241,7 @@ export class FollowUpModal extends Modal {
   private renderCandidates() {
     if (!this.candidateListEl) return;
     this.candidateListEl.empty();
-    this.candidateListEl.style.display = this.candidates.length > 0 ? 'block' : 'none';
+    this.candidateListEl.removeClass('setting-hidden');
 
     if (this.candidates.length === 0) {
       this.candidateListEl.createEl('p', {
@@ -264,7 +264,7 @@ export class FollowUpModal extends Modal {
         cls: 'follow-up-candidate-input',
       });
       input.value = this.candidates[i];
-      input.style.width = '100%';
+      input.addClass('setting-wide-input');
       input.addEventListener('input', () => {
         this.candidates[i] = input.value;
       });

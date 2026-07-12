@@ -52,10 +52,10 @@ export class MergeModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl('h2', { text: '🔀 合并分支' });
+    new Setting(contentEl).setName('🔀 合并分支').setHeading();
 
     // 节点选择列表
-    contentEl.createEl('h3', { text: '选择要合并的节点' });
+    new Setting(contentEl).setName('选择要合并的节点').setHeading();
     const nodeList = contentEl.createDiv({ cls: 'merge-node-list' });
 
     const candidates = this.getCandidateNodes();
@@ -89,18 +89,17 @@ export class MergeModal extends Modal {
     }
 
     // 提问输入
-    contentEl.createEl('h3', { text: '提问' });
+    new Setting(contentEl).setName('提问').setHeading();
     new Setting(contentEl)
       .setDesc('可以是总结、对比、或其他任何问题')
       .addTextArea((text) => {
         text.setPlaceholder('总结以上观点');
         text.setValue(this.prompt);
-        text.inputEl.style.width = '100%';
-        text.inputEl.style.minHeight = '60px';
+        text.inputEl.addClass('setting-wide-input', 'setting-min-height-60');
         text.onChange((value) => {
           this.prompt = value;
         });
-        setTimeout(() => text.inputEl.focus(), 50);
+        window.setTimeout(() => text.inputEl.focus(), 50);
       });
 
     // 模型选择
@@ -133,6 +132,7 @@ export class MergeModal extends Modal {
 
   /** 获取候选节点：有内容的文本节点 */
   private getCandidateNodes(): CanvasRuntimeNode[] {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const internalCanvas = this.canvas as any;
     const nodesMap = internalCanvas.nodes ?? internalCanvas._nodes;
     if (!nodesMap) return [];
@@ -141,7 +141,7 @@ export class MergeModal extends Modal {
       ? Array.from(nodesMap.values())
       : Object.values(nodesMap);
 
-    return allNodes.filter((n: any) => {
+    return allNodes.filter((n: CanvasRuntimeNode) => {
       const text = getNodeText(n).trim();
       return text && text !== '思考中...' && text !== 'Loading...';
     });

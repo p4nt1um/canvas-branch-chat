@@ -75,7 +75,7 @@ export interface CanvasRuntimeView {
 export interface CanvasData {
   nodes: CanvasTextData[];
   edges: CanvasEdgeData[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // ============================================================

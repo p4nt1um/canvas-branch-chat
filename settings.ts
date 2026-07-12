@@ -61,14 +61,14 @@ interface LegacySettings {
 /**
  * 检测并迁移旧版设置
  */
-function migrateSettings(data: any): PluginSettingsV2 {
+function migrateSettings(data: unknown): PluginSettingsV2 {
   // 已经是 V2 格式
-  if (data && Array.isArray(data.models) && data.models.length > 0) {
+  if (data && Array.isArray((data as PluginSettingsV2).models) && (data as PluginSettingsV2).models.length > 0) {
     return Object.assign({}, DEFAULT_SETTINGS_V2, data);
   }
 
   // 旧版格式（单模型）
-  if (data && data.apiKey !== undefined) {
+  if (data && typeof (data as LegacySettings).apiKey !== 'undefined') {
     const legacy = data as LegacySettings;
     const model: ModelConfig = {
       id: generateId(8),
@@ -253,7 +253,7 @@ class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: '模型配置' });
+    new Setting(containerEl).setName('模型配置').setHeading();
 
     // 渲染模型列表
     const models = this.manager.getModels();
@@ -264,14 +264,13 @@ class SettingsTab extends PluginSettingTab {
       .addButton((btn) => {
         btn
           .setButtonText('+ 添加模型')
-          .onClick(async () => {
-            await this.manager.addModel();
-            this.display();
+          .onClick(() => {
+            void this.manager.addModel().then(() => this.display());
           });
       });
 
     // 全局自定义指令
-    containerEl.createEl('h2', { text: '全局设置' });
+    new Setting(containerEl).setName('全局设置').setHeading();
     new Setting(containerEl)
       .setName('全局自定义指令')
       .setDesc('作为默认系统提示词（单个模型可覆盖此设置）')
@@ -280,14 +279,14 @@ class SettingsTab extends PluginSettingTab {
           .setPlaceholder('例如：你是一个专业的产品经理...')
           .setValue(this.manager.getSettings().customInstructions);
         text.inputEl.rows = 3;
-        text.inputEl.style.width = '100%';
-        return text.onChange(async (value) => {
-          await this.manager.setSettings({ customInstructions: value });
+        text.inputEl.addClass('setting-wide-input');
+        return text.onChange((value) => {
+          void this.manager.setSettings({ customInstructions: value });
         });
       });
 
     // P2 #15: 上下文分级压缩设置
-    containerEl.createEl('h3', { text: '📋 上下文压缩' });
+    new Setting(containerEl).setName('📋 上下文压缩').setHeading();
 
     new Setting(containerEl)
       .setName('最近 N 个节点发全文')
@@ -297,8 +296,8 @@ class SettingsTab extends PluginSettingTab {
           .setLimits(1, 10, 1)
           .setValue(this.manager.getContextRecentFull())
           .setDynamicTooltip()
-          .onChange(async (value) => {
-            await this.manager.setSettings({ contextRecentFull: value });
+          .onChange((value) => {
+            void this.manager.setSettings({ contextRecentFull: value });
           });
       });
 
@@ -310,8 +309,8 @@ class SettingsTab extends PluginSettingTab {
           .setLimits(100, 2000, 100)
           .setValue(this.manager.getContextTruncateChars())
           .setDynamicTooltip()
-          .onChange(async (value) => {
-            await this.manager.setSettings({ contextTruncateChars: value });
+          .onChange((value) => {
+            void this.manager.setSettings({ contextTruncateChars: value });
           });
       });
 
@@ -321,8 +320,8 @@ class SettingsTab extends PluginSettingTab {
       .addToggle((toggle) => {
         toggle
           .setValue(this.manager.getSummaryGuidance())
-          .onChange(async (value) => {
-            await this.manager.setSettings({ summaryGuidance: value });
+          .onChange((value) => {
+            void this.manager.setSettings({ summaryGuidance: value });
           });
       });
   }
@@ -347,16 +346,14 @@ class SettingsTab extends PluginSettingTab {
     const headerBtns = header.createDiv({ cls: 'model-config-actions' });
     if (!isDefault) {
       const setDefaultBtn = headerBtns.createEl('button', { text: '设为默认' });
-      setDefaultBtn.addEventListener('click', async () => {
-        await this.manager.setDefaultModel(model.id);
-        this.display();
+      setDefaultBtn.addEventListener('click', () => {
+        void this.manager.setDefaultModel(model.id).then(() => this.display());
       });
     }
     const deleteBtn = headerBtns.createEl('button', { text: '🗑', cls: 'mod-warning' });
-    deleteBtn.addEventListener('click', async () => {
+    deleteBtn.addEventListener('click', () => {
       if (this.manager.getModels().length <= 1) return; // 至少保留1个
-      await this.manager.removeModel(model.id);
-      this.display();
+      void this.manager.removeModel(model.id).then(() => this.display());
     });
 
     // 卡片内容：各字段
@@ -368,8 +365,8 @@ class SettingsTab extends PluginSettingTab {
       .setDesc('显示名（如"分析师"、"魔鬼代言人"）')
       .addText((text) => {
         text.setValue(model.alias);
-        text.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { alias: value });
+        text.onChange((value) => {
+          void this.manager.updateModel(model.id, { alias: value });
         });
       });
 
@@ -380,10 +377,10 @@ class SettingsTab extends PluginSettingTab {
         dropdown
           .addOptions({ deepseek: 'DeepSeek', openai: 'OpenAI', custom: '自定义' })
           .setValue(model.provider)
-          .onChange(async (value) => {
+          .onChange((value) => {
             const provider = value as 'deepseek' | 'openai' | 'custom';
             const defaults = PROVIDER_DEFAULTS[provider];
-            await this.manager.updateModel(model.id, {
+            void this.manager.updateModel(model.id, {
               provider,
               baseUrl: defaults.baseUrl || model.baseUrl,
               model: defaults.model || model.model,
@@ -397,9 +394,9 @@ class SettingsTab extends PluginSettingTab {
       .setName('API Endpoint')
       .addText((text) => {
         text.setValue(model.baseUrl);
-        text.inputEl.style.width = '100%';
-        text.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { baseUrl: value });
+        text.inputEl.addClass('setting-wide-input');
+        text.onChange((value) => {
+          void this.manager.updateModel(model.id, { baseUrl: value });
         });
       });
 
@@ -410,8 +407,8 @@ class SettingsTab extends PluginSettingTab {
       .addText((text) => {
         text.setPlaceholder('DEEPSEEK_API_KEY');
         text.setValue(model.apiKeyEnvVar);
-        text.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { apiKeyEnvVar: value });
+        text.onChange((value) => {
+          void this.manager.updateModel(model.id, { apiKeyEnvVar: value });
         });
       });
 
@@ -422,33 +419,35 @@ class SettingsTab extends PluginSettingTab {
       .addButton((btn) => {
         btn
           .setButtonText('🔌 测试连接')
-          .onClick(async () => {
-            btn.setButtonText('测试中...');
-            btn.setDisabled(true);
+          .onClick(() => {
+            void (async () => {
+              btn.setButtonText('测试中...');
+              btn.setDisabled(true);
 
-            const apiKey = this.manager.resolveApiKey(model);
-            if (!apiKey) {
-              new Notice('❌ 无法解析 API Key，请检查环境变量设置');
+              const apiKey = this.manager.resolveApiKey(model);
+              if (!apiKey) {
+                new Notice('❌ 无法解析 API Key，请检查环境变量设置');
+                btn.setButtonText('🔌 测试连接');
+                btn.setDisabled(false);
+                return;
+              }
+
+              const provider = new OpenAIProvider(model, apiKey);
+              const result = await provider.testConnection();
+
               btn.setButtonText('🔌 测试连接');
               btn.setDisabled(false);
-              return;
-            }
 
-            const provider = new OpenAIProvider(model, apiKey);
-            const result = await provider.testConnection();
-
-            btn.setButtonText('🔌 测试连接');
-            btn.setDisabled(false);
-
-            if (result.ok) {
-              const models = result.models || [];
-              new Notice(`✅ 连接成功！发现 ${models.length} 个可用模型`);
-              // 缓存可用模型列表到配置对象
-              await this.manager.updateModel(model.id, { _availableModels: models });
-              this.display();
-            } else {
-              new Notice(`❌ 连接失败: ${result.error}`);
-            }
+              if (result.ok) {
+                const models = result.models || [];
+                new Notice(`✅ 连接成功！发现 ${models.length} 个可用模型`);
+                // 缓存可用模型列表到配置对象
+                void this.manager.updateModel(model.id, { _availableModels: models });
+                this.display();
+              } else {
+                new Notice(`❌ 连接失败: ${result.error}`);
+              }
+            })();
           });
       });
 
@@ -469,8 +468,8 @@ class SettingsTab extends PluginSettingTab {
         }
         dropdown.addOptions(options);
         dropdown.setValue(model.model);
-        dropdown.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { model: value });
+        dropdown.onChange((value) => {
+          void this.manager.updateModel(model.id, { model: value });
         });
       });
       modelSetting.setDesc(`✅ 已获取 ${model._availableModels.length} 个可用模型（来自测试连接）`);
@@ -480,8 +479,8 @@ class SettingsTab extends PluginSettingTab {
       modelSetting.addText((text) => {
         text.setPlaceholder('deepseek-chat');
         text.setValue(model.model);
-        text.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { model: value });
+        text.onChange((value) => {
+          void this.manager.updateModel(model.id, { model: value });
         });
       });
     }
@@ -493,8 +492,8 @@ class SettingsTab extends PluginSettingTab {
         const options: Record<string, string> = {};
         COLOR_PRESETS.forEach(c => { options[c.value] = c.label; });
         dropdown.addOptions(options).setValue(model.color);
-        dropdown.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { color: value });
+        dropdown.onChange((value) => {
+          void this.manager.updateModel(model.id, { color: value });
         });
       });
 
@@ -504,8 +503,8 @@ class SettingsTab extends PluginSettingTab {
       .setDesc('emoji（如 🤖 🔬 🔴）')
       .addText((text) => {
         text.setValue(model.icon || '');
-        text.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { icon: value });
+        text.onChange((value) => {
+          void this.manager.updateModel(model.id, { icon: value });
         });
       });
 
@@ -517,9 +516,9 @@ class SettingsTab extends PluginSettingTab {
         text.setPlaceholder('你是一个严谨的分析师...');
         text.setValue(model.systemPrompt);
         text.inputEl.rows = 3;
-        text.inputEl.style.width = '100%';
-        text.onChange(async (value) => {
-          await this.manager.updateModel(model.id, { systemPrompt: value });
+        text.inputEl.addClass('setting-wide-input');
+        text.onChange((value) => {
+          void this.manager.updateModel(model.id, { systemPrompt: value });
         });
       });
 
@@ -529,10 +528,10 @@ class SettingsTab extends PluginSettingTab {
       .setDesc('0 = 严谨，2 = 发散（默认 0.7）')
       .addText((text) => {
         text.setValue(String(model.temperature ?? 0.7));
-        text.onChange(async (value) => {
+        text.onChange((value) => {
           const num = parseFloat(value);
           if (!isNaN(num) && num >= 0 && num <= 2) {
-            await this.manager.updateModel(model.id, { temperature: num });
+            void this.manager.updateModel(model.id, { temperature: num });
           }
         });
       });
@@ -542,10 +541,10 @@ class SettingsTab extends PluginSettingTab {
       .setName('Max Tokens')
       .addText((text) => {
         text.setValue(String(model.maxTokens ?? 4096));
-        text.onChange(async (value) => {
+        text.onChange((value) => {
           const num = parseInt(value);
           if (!isNaN(num) && num > 0) {
-            await this.manager.updateModel(model.id, { maxTokens: num });
+            void this.manager.updateModel(model.id, { maxTokens: num });
           }
         });
       });

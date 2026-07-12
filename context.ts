@@ -9,6 +9,7 @@
  */
 
 import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, CanvasData, ChatNodeData } from './types';
+import type { CanvasTextData } from 'obsidian/canvas';
 
 // ============================================================
 // Canvas 边查找
@@ -81,7 +82,10 @@ export function findNodeById(
   nodeId: string
 ): CanvasRuntimeNode | null {
   // Obsidian Canvas 内部有 nodes 字典（Map 或对象）
-  const internalCanvas = canvas as any;
+  const internalCanvas = canvas as unknown as {
+    nodes?: Map<string, CanvasRuntimeNode> | Record<string, CanvasRuntimeNode>;
+    _nodes?: Map<string, CanvasRuntimeNode> | Record<string, CanvasRuntimeNode>;
+  };
   
   // 尝试多种可能的内部属性名
   const nodesMap = internalCanvas.nodes ?? internalCanvas._nodes;
@@ -121,7 +125,7 @@ export function getNodeRole(node: CanvasRuntimeNode): 'user' | 'assistant' | 'br
     const canvas = node.canvas;
     if (canvas) {
       const canvasData = canvas.getData();
-      const nodeData = canvasData.nodes.find((n: any) => n.id === node.id);
+      const nodeData = canvasData.nodes.find((n: CanvasTextData) => n.id === node.id);
       if (nodeData && nodeData.chatRole) {
         return nodeData.chatRole;
       }
@@ -160,7 +164,7 @@ export function setNodeMetadata(node: CanvasRuntimeNode, metadata: Record<string
     const canvas = node.canvas;
     if (canvas) {
       const canvasData = canvas.getData();
-      const nodeData = canvasData.nodes.find((n: any) => n.id === node.id);
+      const nodeData = canvasData.nodes.find((n: CanvasTextData) => n.id === node.id);
       if (nodeData) {
         Object.assign(nodeData, metadata);
         canvas.setData(canvasData);
@@ -169,7 +173,7 @@ export function setNodeMetadata(node: CanvasRuntimeNode, metadata: Record<string
     }
     // 同时写入节点运行时
     const data = node.getData();
-    node.setData({ ...data, ...metadata } as any);
+    node.setData({ ...data, ...metadata } as Partial<CanvasTextData>);
   } catch {
     // 忽略
   }

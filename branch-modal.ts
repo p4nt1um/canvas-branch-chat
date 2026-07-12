@@ -61,7 +61,7 @@ export class BranchModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    contentEl.createEl('h2', { text: '从此处分叉' });
+    new Setting(contentEl).setName('从此处分叉').setHeading();
 
     contentEl.createEl('p', {
       text: '输入分支的探讨方向。每个方向可选不同模型，多模型交叉分析效果更佳。',
@@ -166,7 +166,7 @@ export class BranchModal extends Modal {
       // 方向文本输入
       setting.addText((textInput) => {
         textInput.setPlaceholder('例如：从成本角度分析');
-        textInput.inputEl.style.width = '100%';
+        textInput.inputEl.addClass('setting-wide-input');
         textInput.setValue(text);
         textInput.onChange((value) => {
           this.directionTexts[index] = value;
@@ -180,7 +180,7 @@ export class BranchModal extends Modal {
           }
         });
         if (index === 0) {
-          setTimeout(() => {
+          window.setTimeout(() => {
             textInput.inputEl.focus();
             this.focusedInputIndex = 0;
           }, 50);
@@ -316,7 +316,7 @@ export class BranchModal extends Modal {
 
       const placeholderIdx = text.indexOf('____');
       if (placeholderIdx >= 0) {
-        setTimeout(() => {
+        window.setTimeout(() => {
           input.setSelectionRange(placeholderIdx, placeholderIdx + 4);
         }, 0);
       }
