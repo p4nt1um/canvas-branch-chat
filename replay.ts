@@ -435,12 +435,33 @@ export class ReplayController {
   }
 
   async start() {
+    try {
+      await this._start();
+    } catch (err) {
+      console.error('[Canvas Branch Chat] Replay error:', err);
+      new Notice(`❌ 回放出错: ${err instanceof Error ? err.message : String(err)}`);
+      this.finish();
+    }
+  }
+
+  private async _start() {
+    console.log('[Canvas Branch Chat] Replay start, canvas:', this.canvas);
+
     // 1. 计算遍历顺序
     const rootId = findRoot(this.canvas, this.startNodeId);
+    console.log('[Canvas Branch Chat] rootId:', rootId);
     this.rebuildTraversal();
+    console.log('[Canvas Branch Chat] nodeIds:', this.nodeIds.length, this.nodeIds);
 
     if (this.nodeIds.length === 0) {
       new Notice('没有可回放的对话节点');
+      return;
+    }
+
+    // 确认 container 可用
+    if (!this.container || !this.container.createDiv) {
+      console.error('[Canvas Branch Chat] container not available:', this.container);
+      new Notice('❌ 无法获取 Canvas 容器');
       return;
     }
 

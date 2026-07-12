@@ -131,8 +131,13 @@ export default class CanvasBranchExtension {
       item.setTitle('▶️ 回放对话');
       item.setIcon('play-circle');
       item.onClick(() => {
-        const replay = new ReplayController(cv, node.id);
-        replay.start();
+        try {
+          const replay = new ReplayController(cv, node.id);
+          void replay.start();
+        } catch (err) {
+          console.error('[Canvas Branch Chat] Replay failed', err);
+          new Notice(`❌ 回放启动失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
       });
     });
   }
