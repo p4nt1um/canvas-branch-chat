@@ -649,9 +649,19 @@ export default class CanvasBranchExtension {
     const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
     const maxWidth = Math.max(...sourceNodes.map(n => n.width || 400));
 
-    // 创建汇总节点
-    const summaryNode = canvas.createTextNode({
+    // 创建 user 节点（显示用户的提示词）
+    const promptNode = canvas.createTextNode({
       pos: { x: centerX, y: maxBottom + 60 },
+      text: userPrompt || '请对以上内容进行总结',
+      size: { width: maxWidth, height: 120 },
+      focus: false,
+    });
+    setNodeRole(promptNode, 'user');
+    setNodeColor(promptNode, '#67B279');
+
+    // 创建 assistant 节点（显示总结结果）
+    const summaryNode = canvas.createTextNode({
+      pos: { x: centerX, y: maxBottom + 60 + 160 },
       text: '思考中...',
       size: { width: maxWidth, height: 200 },
       focus: false,
@@ -660,11 +670,14 @@ export default class CanvasBranchExtension {
     setNodeColor(summaryNode, model.color || '#4A90D9');
     setNodeMetadata(summaryNode, { modelConfigId: model.id });
 
-    // 连线：每个源节点 → 汇总节点
+    // 连线：每个源节点 → user 节点（用虚线或不同颜色表示“合并起点”）
     for (const srcNode of sourceNodes) {
       const bColor = (srcNode.getData() as ChatNodeData)?.chatBranchColor;
-      this.addEdge(canvas, srcNode.id, summaryNode.id, 'bottom', 'top', undefined, bColor);
+      this.addEdge(canvas, srcNode.id, promptNode.id, 'bottom', 'top', undefined, bColor);
     }
+
+    // 连线：user 节点 → assistant 节点
+    this.addEdge(canvas, promptNode.id, summaryNode.id, 'bottom', 'top');
 
     // 构建合并上下文
     const systemPrompt = this.buildSystemPrompt(model.systemPrompt || customInstructions);
