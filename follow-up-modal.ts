@@ -130,20 +130,21 @@ export class FollowUpModal extends Modal {
     this.extracting = false;
   }
 
-  /** 正则提取：从右键节点（如果是 AI）或最近的 AI 祖先提取要点 */
+  /** 正则提取：从右键节点（如果是 AI）或最近的 AI 祖先提取要点
+   * 降级链：标题 → 数字列表 → bullet → 第 1 行
+   * 上级 ≥3 个时只取上级；<3 降级；都 <3 时降到 ≥2 重试；
+   * 仍不满足则取第 1 行非空语句
+   */
   private extractByRegex(): string[] {
     const chain = getAncestorChain(this.canvas, this.sourceNode.id);
-    const questions: string[] = [];
 
-    // 优先取右键节点本身（如果是 AI），否则取最近的 1 个 AI 祖先
+    // 优先取右键节点本身（如果是 AI），否则取最近的 AI 祖先
     const sourceRole = getNodeRole(this.sourceNode);
     let targetNode: CanvasRuntimeNode | null = null;
 
     if (sourceRole === 'assistant') {
-      // 右键在 AI 节点上，直接用它
       targetNode = this.sourceNode;
     } else {
-      // 右键在 user/其他节点上，找最近的 AI 祖先
       for (let i = chain.length - 1; i >= 0 && !targetNode; i--) {
         const node = findNodeById(this.canvas, chain[i]);
         if (node && getNodeRole(node) === 'assistant' && node.id !== this.sourceNode.id) {
@@ -156,35 +157,38 @@ export class FollowUpModal extends Modal {
     const text = getNodeText(targetNode);
     if (!text) return [];
 
-    // 匹配 ### 标题
-    const h3Matches = text.match(/^###\s+.+$/gm) || [];
-    for (const m of h3Matches) {
-      const q = m.replace(/^###\s+/, '').trim();
-      if (q && q.length > 2 && q.length < 100) {
-        questions.push(this.toQuestion(q));
-      }
+    // ── 分级提取 ──
+    const extractLevel = (pattern: RegExp, stripPattern: RegExp): string[] => {
+      const matches = text.match(pattern) || [];
+      return matches
+        .map(m => m.replace(stripPattern, '').trim())
+        .filter(q => q.length > 2 && q.length < 100)
+        .map(q => this.toQuestion(q));
+    };
+
+    const headings = extractLevel(/^#{1,4}\s+.+$/gm, /^#{1,4}\s+/);
+    const numbered = extractLevel(/^\d+[.)、]\s+.+$/gm, /^\d+[.)、]\s+/);
+    const bullets  = extractLevel(/^[-•]\s+.+$/gm, /^[-•]\s+/);
+
+    // 去重工具
+    const dedupe = (arr: string[]): string[] => [...new Set(arr)];
+
+    // ── 降级逻辑：minThreshold 从 3 降到 2 再到 1 ──
+    for (const min of [3, 2, 1]) {
+      if (dedupe(headings).length >= min) return dedupe(headings).slice(0, 6);
+      if (dedupe(numbered).length >= min) return dedupe(numbered).slice(0, 6);
+      if (dedupe(bullets).length  >= min) return dedupe(bullets).slice(0, 6);
     }
 
-    // 匹配数字列表 1. / 2. / 等
-    const numMatches = text.match(/^\d+[.)、]\s+.+$/gm) || [];
-    for (const m of numMatches) {
-      const q = m.replace(/^\d+[.)、]\s+/, '').trim();
-      if (q && q.length > 2 && q.length < 100) {
-        questions.push(this.toQuestion(q));
-      }
+    // ── 全部不足，取第 1 行非空语句 ──
+    const firstLine = text.split('\n').map(l => l.trim()).find(l => l.length > 5);
+    if (firstLine) {
+      // 去掉 markdown 格式符号
+      const clean = firstLine.replace(/^#{1,4}\s+|^\d+[.)、]\s+|^[-•]\s+/, '').trim();
+      return clean ? [this.toQuestion(clean)] : [];
     }
 
-    // 匹配 - bullet points
-    const bulletMatches = text.match(/^[-•]\s+.+$/gm) || [];
-    for (const m of bulletMatches) {
-      const q = m.replace(/^[-•]\s+/, '').trim();
-      if (q && q.length > 2 && q.length < 100) {
-        questions.push(this.toQuestion(q));
-      }
-    }
-
-    // 去重，最多 6 个
-    return [...new Set(questions)].slice(0, 6);
+    return [];
   }
 
   /** 将要点文本转为追问句式 */
