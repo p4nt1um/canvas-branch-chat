@@ -187,41 +187,37 @@
 /* P2 #14: 对话回放样式                                           */
 /* ============================================================ */
 
-/* 全局总览固定不动，节点高亮状态通过 class + inline style 实现 */
+/* 节点高亮状态 */
 
 .replay-played {
-  box-shadow: 0 0 0 2px var(--interactive-accent);
-  transition: box-shadow 0.3s ease;
+  /* box-shadow 由 JS 直接设置 */
 }
 
-/* 伪脉冲通过 scale 动画在 JS 中实现，此处只做边框强调 */
 .replay-current {
-  box-shadow: 0 0 0 3px var(--interactive-accent);
-  transition: none;
+  /* box-shadow 由 JS 直接设置 */
 }
 
 .replay-pending {
-  /* opacity/filter 由 JS 直接设置，方便配合 scale 过渡 */
+  /* opacity/filter 由 JS 直接设置 */
 }
 
-/* 节点放大过渡由 JS 设置 transform + transition */
-
-/* 控制条 — 固定在 Canvas 顶部中央 */
+/* 控制条 — fixed 定位在屏幕顶部，不受 Canvas transform 影响 */
 
 .replay-control-bar {
-  position: absolute;
-  top: 16px;
+  position: fixed;
+  top: 0;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 18px;
+  gap: 12px;
+  padding: 6px 16px;
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  z-index: 9999;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 100000;
   font-size: 13px;
 }
 
