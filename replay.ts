@@ -8,7 +8,7 @@
  */
 
 import { Notice } from 'obsidian';
-import { CanvasRuntimeNode, CanvasRuntimeView } from './types';
+import { CanvasRuntimeNode, CanvasRuntimeView, BBox } from './types';
 import { findChildNodeIds, findNodeById, getNodeRole, findParentNodeId, getNodeCreatedAt } from './context';
 
 type AnyCanvas = CanvasRuntimeView & Record<string, unknown>;
@@ -30,8 +30,6 @@ const SPEEDS: SpeedPreset[] = [
 // ============================================================
 // BBox 辅助
 // ============================================================
-
-interface BBox { minX: number; minY: number; maxX: number; maxY: number; }
 
 function nodeBBox(node: CanvasRuntimeNode): BBox {
   return {
@@ -56,21 +54,19 @@ function padBBox(bbox: BBox, ratio: number): BBox {
 }
 
 function nativeZoomToFit(canvas: AnyCanvas): void {
-  const fn = canvas.zoomToFit;
-  if (typeof fn === 'function') fn.call(canvas);
+  if (typeof canvas.zoomToFit === 'function') canvas.zoomToFit();
 }
 
 function nativeZoomToBbox(canvas: AnyCanvas, bbox: BBox): void {
-  const fn = canvas.zoomToBbox as (bbox: BBox) => void | undefined;
-  if (typeof fn === 'function') fn.call(canvas, bbox);
+  if (typeof canvas.zoomToBbox === 'function') canvas.zoomToBbox(bbox);
 }
 
 function nativeGetViewportBBox(canvas: AnyCanvas): BBox | null {
-  const fn = canvas.getViewportBBox as (() => BBox) | undefined;
-  if (typeof fn === 'function') return fn.call(canvas);
-  const getData = canvas.getData as (() => { nodes: Array<{ x: number; y: number; width?: number; height?: number }> }) | undefined;
-  if (typeof getData === 'function') {
-    const data = getData.call(canvas);
+  if (typeof canvas.getViewportBBox === 'function') {
+    return canvas.getViewportBBox();
+  }
+  if (typeof canvas.getData === 'function') {
+    const data = canvas.getData();
     if (data?.nodes?.length > 0) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       for (const n of data.nodes) {
@@ -90,7 +86,7 @@ function nativeGetViewportBBox(canvas: AnyCanvas): BBox | null {
 // ============================================================
 
 function nodeEl(node: CanvasRuntimeNode): HTMLElement | null {
-  return node.contentEl?.closest('.canvas-node') as HTMLElement | null;
+  return node.contentEl?.closest('.canvas-node') ?? null;
 }
 
 function setHighlight(node: CanvasRuntimeNode, state: 'pending' | 'current' | 'played'): void {

@@ -53,6 +53,14 @@ export interface CanvasRuntimeNode {
   contentEl: HTMLElement;
 }
 
+/** 矩形区域 */
+export interface BBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 /** Obsidian Canvas 内部运行时视图对象 */
 export interface CanvasRuntimeView {
   /** 创建新文本节点 */
@@ -71,6 +79,15 @@ export interface CanvasRuntimeView {
   
   /** 触发自动保存 */
   requestSave(): void;
+
+  /** 缩放至全部内容 */
+  zoomToFit?(): void;
+
+  /** 缩放至指定区域 */
+  zoomToBbox?(bbox: BBox): void;
+
+  /** 获取当前视口区域 */
+  getViewportBBox?(): BBox;
 }
 
 /** Canvas .canvas 文件数据结构 */

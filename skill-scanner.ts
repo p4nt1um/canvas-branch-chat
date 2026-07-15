@@ -1,61 +1,47 @@
 /**
  * skill-scanner.ts — Claude Code Skills 扫描器
  *
- * P2 #21 阶段 1: 扫描全局 ~/.claude/skills/ 和项目 .claude/skills/ 目录，
+ * 扫描 Vault 内 .claude/skills/ 目录，
  * 解析每个 SKILL.md 的 YAML frontmatter + Markdown body。
+ *
+ * 注意：使用 Obsidian Vault Adapter API 而非 Node.js fs，
+ * 以符合 Obsidian 社区插件安全要求。
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { Vault } from 'obsidian';
 import { SkillInfo } from './types';
+
+const SKILLS_DIR = '.claude/skills';
 
 export class SkillScanner {
   private skills: Map<string, SkillInfo> = new Map();
-  private scanDirs: string[] = [];
-  private vaultPath: string;
+  private vault: Vault;
 
-  constructor(vaultPath: string) {
-    this.vaultPath = vaultPath;
-    this.buildScanDirs();
-  }
-
-  /** 构建默认扫描目录 */
-  private buildScanDirs(): void {
-    this.scanDirs.push(path.join(os.homedir(), '.claude', 'skills'));
-    if (this.vaultPath) {
-      this.scanDirs.push(path.join(this.vaultPath, '.claude', 'skills'));
-    }
+  constructor(vault: Vault) {
+    this.vault = vault;
   }
 
   /** 执行扫描 */
   async scan(): Promise<SkillInfo[]> {
     this.skills.clear();
-    const globalDir = this.scanDirs[0];
-    const projectDir = this.scanDirs[1];
-
-    if (globalDir) {
-      try { await this.scanDirectory(globalDir, 'global'); } catch { /* skip */ }
-    }
-    if (projectDir) {
-      try { await this.scanDirectory(projectDir, 'project'); } catch { /* skip */ }
-    }
+    try {
+      await this.scanDirectory(SKILLS_DIR, 'project');
+    } catch { /* skip */ }
 
     return Array.from(this.skills.values());
   }
 
-  /** 扫描单个目录 */
+  /** 扫描单个目录（使用 Vault Adapter API） */
   private async scanDirectory(dirPath: string, source: 'global' | 'project'): Promise<void> {
-    if (!fs.existsSync(dirPath)) return;
+    if (!(await this.vault.adapter.exists(dirPath))) return;
 
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillFile = path.join(dirPath, entry.name, 'SKILL.md');
-      if (!fs.existsSync(skillFile)) continue;
+    const listing = await this.vault.adapter.list(dirPath);
+    for (const folder of listing.folders) {
+      const skillFile = `${folder}/SKILL.md`;
+      if (!(await this.vault.adapter.exists(skillFile))) continue;
 
       try {
-        const content = fs.readFileSync(skillFile, 'utf-8');
+        const content = await this.vault.adapter.read(skillFile);
         const parsed = this.parseSkillMd(content, skillFile, source);
         if (parsed) this.skills.set(parsed.name, parsed);
       } catch {
@@ -82,8 +68,9 @@ export class SkillScanner {
   private parseFrontmatter(content: string, filePath: string): { data: Record<string, string>; body: string } | null {
     const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
     if (!match) {
+      const folderName = filePath.split('/').slice(-2, -1)[0] || filePath;
       return {
-        data: { name: path.basename(path.dirname(filePath)) },
+        data: { name: folderName },
         body: content.trim(),
       };
     }
