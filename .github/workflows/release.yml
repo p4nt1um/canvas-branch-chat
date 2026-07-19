@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - '*'  # Obsidian 社区要求版本号不带 v 前缀
 
 permissions:
   contents: write
