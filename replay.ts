@@ -337,8 +337,6 @@ export class ReplayController {
       return;
     }
 
-    console.log(`[Canvas Branch Chat] 🎬 Replay: ${this.nodeIds.length} nodes, mode=${this.mode}`);
-
     this.savedBBox = nativeGetViewportBBox(this.canvas);
 
     this.bar = createControlBar(this.nodeIds.length, {

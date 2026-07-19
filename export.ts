@@ -266,8 +266,8 @@ export function exportCanvasConversation(
     void app.vault.create(filePath, markdown).then(() => {
       new Notice(t('notice.exportNew', { path: filePath }));
       void app.workspace.openLinkText(filePath, '', true);
-    }).catch(err => {
-      new Notice(t('notice.exportError', { error: err }));
+    }).catch((err: unknown) => {
+      new Notice(t('notice.exportError', { error: String(err) }));
     });
   }
 }

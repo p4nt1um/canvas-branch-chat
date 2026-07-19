@@ -258,6 +258,34 @@ class SettingsTab extends PluginSettingTab {
     this.manager = manager;
   }
 
+  /**
+   * 提供设置项搜索索引（Obsidian ≥1.13.0）
+   * 注意：复杂动态 UI（模型卡片、连通性测试等）无法用声明式 API 表达，
+   * 仍通过 display() 渲染完整设置页。
+   */
+  getSettingDefinitions() {
+    const defs = [
+      { name: t('settings.language'), description: t('settings.languageDesc') },
+      { name: t('settings.models'), description: t('settings.models') },
+      { name: t('settings.global'), description: t('settings.customInstructions') },
+      { name: t('settings.customInstructions'), description: t('settings.customInstructionsDesc') },
+      { name: t('settings.compression'), description: t('settings.recentFull') },
+      { name: t('settings.recentFull'), description: t('settings.recentFullDesc') },
+      { name: t('settings.truncateChars'), description: t('settings.truncateCharsDesc') },
+      { name: t('settings.summaryGuide'), description: t('settings.summaryGuideDesc') },
+    ];
+    // 动态添加各模型配置项
+    for (const model of this.manager.getModels()) {
+      defs.push({ name: `${model.alias}`, description: `${model.provider} / ${model.model}` });
+      defs.push({ name: t('settings.alias'), description: `${model.alias} — ${t('settings.aliasDesc')}` });
+      defs.push({ name: t('settings.testConn'), description: `${model.alias} — ${t('settings.testConnDesc')}` });
+      defs.push({ name: t('settings.systemPrompt'), description: `${model.alias} — ${t('settings.systemPromptDesc')}` });
+      defs.push({ name: t('settings.temperature'), description: `${model.alias} — ${t('settings.temperatureDesc')}` });
+      defs.push({ name: t('settings.maxTokens'), description: `${model.alias}` });
+    }
+    return defs;
+  }
+
   display(): void {
     const { containerEl } = this;
     containerEl.empty();

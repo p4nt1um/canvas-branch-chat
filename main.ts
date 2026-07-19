@@ -23,9 +23,7 @@ export default class CanvasBranchChatPlugin extends Plugin {
 
     // 2. 初始化 Skills 扫描器
     this.skillScanner = new SkillScanner(this.app.vault);
-    this.skillScanner.scan().then((skills) => {
-      console.log(`Canvas Branch Chat: loaded ${skills.length} skills`);
-    }).catch(() => {});
+    this.skillScanner.scan().catch(() => {});
 
     // 3. 注册 Canvas 分支对话扩展
     this.canvasExtension = new CanvasBranchExtension(this);
@@ -41,10 +39,5 @@ export default class CanvasBranchChatPlugin extends Plugin {
       },
     });
 
-    console.log('Canvas Branch Chat: loaded');
-  }
-
-  onunload() {
-    console.log('Canvas Branch Chat: unloaded');
   }
 }
