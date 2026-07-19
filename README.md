@@ -10,6 +10,18 @@ Flowith-style branching AI conversations on Obsidian Canvas. Fork from any node,
 
 ---
 
+## 📸 预览 / Screenshots
+
+<img src="assets/i18n-canvas-demo.jpg" alt="Canvas Branch Chat 分叉对话" width="800">
+
+*多方向分叉对话 + 框架预设 + 模型选择 — 中文界面*
+
+<img src="assets/i18n-settings.jpg" alt="语言设置" width="400">
+
+*语言设置：跟随系统 / 简体中文 / English*
+
+---
+
 ## 📌 语言 / Language
 
 - [简体中文](#简体中文) ← 当前
@@ -46,8 +58,13 @@ Flowith-style branching AI conversations on Obsidian Canvas. Fork from any node,
 | 📝 节点自动命名 | AI 回答完成后自动写入摘要元数据，Canvas 上不用打开就能看到梗概 | ✅ |
 | ⚡ 流式刷新 | token 级流式更新到 Canvas 节点，实时看到 AI 输出 | ✅ |
 | 🏷️ 快捷模板 | 分叉弹窗中可点击的模板 chips，一键插入常用方向 | ✅ |
+| 🔀 分支合并 | 多分支合并为总结节点 | ✅ |
+| ▶️ 回放对话 | 按时间线/广度/深度回放整棵对话树 | ✅ |
+| 🌐 多语言 | 简体中文 / English，跟随系统自动切换 | ✅ |
 
 ### 效果示意
+
+> 📸 参见上方[预览截图](#-预览--screenshots)
 
 ```
                     ┌──[成本角度]──→ [AI回答: 成本...] ──→ [追问] ──→ ...
@@ -59,7 +76,7 @@ Flowith-style branching AI conversations on Obsidian Canvas. Fork from any node,
 
 #### 方式一：手动安装
 
-1. 下载 [最新 Release v0.1.0](https://github.com/p4nt1um/canvas-branch-chat/releases/tag/0.1.0)
+1. 下载 [最新 Release](https://github.com/p4nt1um/canvas-branch-chat/releases/latest)
 2. 解压得到 `main.js`、`manifest.json`、`styles.css`
 3. 放到你的 Obsidian vault 插件目录：
    ```
@@ -159,8 +176,13 @@ This is not "yet another AI chat plugin" — Obsidian already has Text Generator
 | 📝 Auto node naming | AI responses auto-write summary metadata for easy scanning on Canvas | ✅ |
 | ⚡ Streaming | Token-level streaming updates to Canvas nodes in real time | ✅ |
 | 🏷️ Quick templates | Clickable template chips in the branch dialog for common directions | ✅ |
+| 🔀 Branch merging | Combine multiple branches into a summary node | ✅ |
+| ▶️ Replay | Step through the conversation tree chronologically | ✅ |
+| 🌐 i18n | 简体中文 / English, auto-detect system locale | ✅ |
 
 ### Example
+
+> 📸 See [screenshots above](#-预览--screenshots)
 
 ```
                        ┌──[Cost]──→ [AI: Cost analysis...] ──→ [Follow-up] ──→ ...
@@ -172,7 +194,7 @@ This is not "yet another AI chat plugin" — Obsidian already has Text Generator
 
 #### Option 1: Manual install
 
-1. Download the [latest release v0.1.0](https://github.com/p4nt1um/canvas-branch-chat/releases/tag/0.1.0)
+1. Download the [latest release](https://github.com/p4nt1um/canvas-branch-chat/releases/latest)
 2. Extract `main.js`, `manifest.json`, `styles.css`
 3. Place them in your vault's plugin directory:
    ```
@@ -253,10 +275,9 @@ See [PLAN.md](./PLAN.md) for the full development roadmap.
 
 ### P2 (Next)
 
-- Branch merging — combine multiple branches into a summary node
-- Conversation replay — step through the tree chronologically
 - Context pruning — selectively exclude ancestor nodes when forking
-- Fork framework presets — pre-built branching structures
+- Smart follow-up — AI suggests follow-up questions
+- Skill scanner integration
 
 ### P3 (Future)
 
