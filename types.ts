@@ -260,6 +260,7 @@ export interface PresetGroup {
 export interface BranchTemplate {
   id: string;
   text: string;
+  text_en?: string;
   builtin: boolean;
 }
 
@@ -269,40 +270,46 @@ export interface BranchFramework {
   id: string;
   /** 框架名称 */
   name: string;
+  /** 框架名称（英文） */
+  name_en?: string;
   /** 图标 emoji */
   icon?: string;
   /** 方向列表 */
   directions: string[];
+  /** 方向列表（英文） */
+  directions_en?: string[];
   /** 说明 */
   description: string;
+  /** 说明（英文） */
+  description_en?: string;
   /** 内置 vs 用户自定义 */
   builtin: boolean;
 }
 
 /** 内置默认模板 */
 export const DEFAULT_BRANCH_TEMPLATES: BranchTemplate[] = [
-  { id: 'bt1', text: '从「____」角度分析', builtin: true },
-  { id: 'bt2', text: '换个思路继续', builtin: true },
-  { id: 'bt3', text: '深入探讨：____', builtin: true },
-  { id: 'bt4', text: '假设____不成立呢', builtin: true },
-  { id: 'bt5', text: '补充一个角度', builtin: true },
+  { id: 'bt1', text: '从「____」角度分析', text_en: 'Analyze from "____" perspective', builtin: true },
+  { id: 'bt2', text: '换个思路继续', text_en: 'Try a different angle', builtin: true },
+  { id: 'bt3', text: '深入探讨：____', text_en: 'Dive deeper: ____', builtin: true },
+  { id: 'bt4', text: '假设____不成立呢', text_en: 'What if "____" is not true?', builtin: true },
+  { id: 'bt5', text: '补充一个角度', text_en: 'Add another perspective', builtin: true },
 ];
 
 /** P2 #16: 内置框架预设（前 8 个优先级更高） */
 export const DEFAULT_FRAMEWORKS: BranchFramework[] = [
-  { id: 'fw1', name: '正反合', icon: '⚖️', directions: ['正方观点', '反方观点', '综合以上正反'], description: '快速辩证，正反综合', builtin: true },
-  { id: 'fw2', name: '多角度分析', icon: '🔍', directions: ['从技术角度', '从成本角度', '从用户体验角度', '从风险角度'], description: '全面评估问题的多个维度', builtin: true },
-  { id: 'fw3', name: '六顶思考帽', icon: '🎩', directions: ['白帽：客观事实和数据', '红帽：直觉、情感和预感', '黑帽：风险、批判和问题', '黄帽：积极价值和利益', '绿帽：创新和可能性', '蓝帽：全局总结和流程控制'], description: '团队讨论，六种思维模式', builtin: true },
-  { id: 'fw4', name: '渐进细化', icon: '🔬', directions: ['概述这个问题', '深入分析关键细节', '提出具体执行方案'], description: '从概到深，逐步聚焦', builtin: true },
-  { id: 'fw5', name: 'SWOT', icon: '📊', directions: ['优势 (Strengths)', '劣势 (Weaknesses)', '机会 (Opportunities)', '威胁 (Threats)'], description: '战略分析经典框架', builtin: true },
-  { id: 'fw6', name: '5W2H', icon: '📋', directions: ['What：是什么', 'Why：为什么做', 'Who：谁负责', 'When：时间节点', 'Where：在哪做', 'How：怎么做', 'How much：预算多少'], description: '项目规划全景分析', builtin: true },
-  { id: 'fw7', name: '利弊得失', icon: '💰', directions: ['做的收益', '不做的风险', '折中方案'], description: '决策权衡利弊', builtin: true },
-  { id: 'fw8', name: '复盘四步', icon: '🔄', directions: ['目标是什么', '实际怎样', '差距原因', '下次怎么改'], description: '经验总结与改进', builtin: true },
-  { id: 'fw9', name: 'MECE 互斥穷尽', icon: '🧩', directions: ['按维度 A 分类分析', '按维度 B 分类分析（与 A 互斥）', '检查是否有遗漏'], description: '不重不漏地拆解问题', builtin: true },
-  { id: 'fw10', name: 'Past-Present-Future', icon: '⏳', directions: ['过去怎么做的（历史经验）', '现在的情况（现状盘点）', '未来怎么走（趋势预判）'], description: '时间线视角分析', builtin: true },
-  { id: 'fw11', name: '假设-验证-结论', icon: '💡', directions: ['提出假设', '设计验证方法', '预判可能结论'], description: '科学推理方法论', builtin: true },
-  { id: 'fw12', name: '用户旅程', icon: '🛤️', directions: ['发现阶段（用户怎么知道）', '决策阶段（为什么选你）', '使用阶段（体验如何）', '流失阶段（为什么离开）'], description: '产品视角用户全链路', builtin: true },
-  { id: 'fw13', name: '技术选型对比', icon: '⚙️', directions: ['方案 A 优劣', '方案 B 优劣', '综合推荐'], description: '技术方案对比决策', builtin: true },
+  { id: 'fw1', name: '正反合', name_en: 'Thesis-Antithesis-Synthesis', icon: '⚖️', directions: ['正方观点', '反方观点', '综合以上正反'], directions_en: ['Thesis: arguments for', 'Antithesis: arguments against', 'Synthesis: combine both sides'], description: '快速辩证，正反综合', description_en: 'Quick dialectical debate, synthesize pros and cons', builtin: true },
+  { id: 'fw2', name: '多角度分析', name_en: 'Multi-Perspective', icon: '🔍', directions: ['从技术角度', '从成本角度', '从用户体验角度', '从风险角度'], directions_en: ['From a technical perspective', 'From a cost perspective', 'From a UX perspective', 'From a risk perspective'], description: '全面评估问题的多个维度', description_en: 'Evaluate the problem from multiple dimensions', builtin: true },
+  { id: 'fw3', name: '六顶思考帽', name_en: 'Six Thinking Hats', icon: '🎩', directions: ['白帽：客观事实和数据', '红帽：直觉、情感和预感', '黑帽：风险、批判和问题', '黄帽：积极价值和利益', '绿帽：创新和可能性', '蓝帽：全局总结和流程控制'], directions_en: ['White Hat: facts and data', 'Red Hat: intuition and feelings', 'Black Hat: risks and criticism', 'Yellow Hat: benefits and value', 'Green Hat: creativity and possibilities', 'Blue Hat: process and summary'], description: '团队讨论，六种思维模式', description_en: 'Team discussion with six thinking modes', builtin: true },
+  { id: 'fw4', name: '渐进细化', name_en: 'Progressive Refinement', icon: '🔬', directions: ['概述这个问题', '深入分析关键细节', '提出具体执行方案'], directions_en: ['Overview of the problem', 'Deep dive into key details', 'Propose actionable solutions'], description: '从概到深，逐步聚焦', description_en: 'From overview to deep dive, progressively focus', builtin: true },
+  { id: 'fw5', name: 'SWOT', name_en: 'SWOT', icon: '📊', directions: ['优势 (Strengths)', '劣势 (Weaknesses)', '机会 (Opportunities)', '威胁 (Threats)'], directions_en: ['Strengths', 'Weaknesses', 'Opportunities', 'Threats'], description: '战略分析经典框架', description_en: 'Classic strategic analysis framework', builtin: true },
+  { id: 'fw6', name: '5W2H', name_en: '5W2H', icon: '📋', directions: ['What：是什么', 'Why：为什么做', 'Who：谁负责', 'When：时间节点', 'Where：在哪做', 'How：怎么做', 'How much：预算多少'], directions_en: ['What: define the objective', 'Why: the reason behind it', 'Who: responsible person', 'When: timeline', 'Where: location/context', 'How: execution plan', 'How much: budget/resources'], description: '项目规划全景分析', description_en: 'Comprehensive project planning analysis', builtin: true },
+  { id: 'fw7', name: '利弊得失', name_en: 'Pros & Cons', icon: '💰', directions: ['做的收益', '不做的风险', '折中方案'], directions_en: ['Benefits of doing it', 'Risks of not doing it', 'Compromise/middle ground'], description: '决策权衡利弊', description_en: 'Weigh pros and cons for decision-making', builtin: true },
+  { id: 'fw8', name: '复盘四步', name_en: 'Retrospective (4 Steps)', icon: '🔄', directions: ['目标是什么', '实际怎样', '差距原因', '下次怎么改'], directions_en: ['What was the goal?', 'What actually happened?', 'Why the gap?', 'How to improve next time?'], description: '经验总结与改进', description_en: 'Reflect on experience and improve', builtin: true },
+  { id: 'fw9', name: 'MECE 互斥穷尽', name_en: 'MECE (Mutually Exclusive, Collectively Exhaustive)', icon: '🧩', directions: ['按维度 A 分类分析', '按维度 B 分类分析（与 A 互斥）', '检查是否有遗漏'], directions_en: ['Classify by dimension A', 'Classify by dimension B (mutually exclusive with A)', 'Check for gaps (collectively exhaustive)'], description: '不重不漏地拆解问题', description_en: 'Decompose without overlap or gaps', builtin: true },
+  { id: 'fw10', name: 'Past-Present-Future', name_en: 'Past-Present-Future', icon: '⏳', directions: ['过去怎么做的（历史经验）', '现在的情况（现状盘点）', '未来怎么走（趋势预判）'], directions_en: ['Past: historical experience', 'Present: current situation', 'Future: trend and direction'], description: '时间线视角分析', description_en: 'Timeline perspective analysis', builtin: true },
+  { id: 'fw11', name: '假设-验证-结论', name_en: 'Hypothesis-Test-Conclusion', icon: '💡', directions: ['提出假设', '设计验证方法', '预判可能结论'], directions_en: ['Propose a hypothesis', 'Design a verification method', 'Anticipate possible conclusions'], description: '科学推理方法论', description_en: 'Scientific reasoning methodology', builtin: true },
+  { id: 'fw12', name: '用户旅程', name_en: 'User Journey', icon: '🛤️', directions: ['发现阶段（用户怎么知道）', '决策阶段（为什么选你）', '使用阶段（体验如何）', '流失阶段（为什么离开）'], directions_en: ['Discovery: how users find you', 'Decision: why they choose you', 'Usage: the experience', 'Churn: why they leave'], description: '产品视角用户全链路', description_en: 'Full user journey from a product perspective', builtin: true },
+  { id: 'fw13', name: '技术选型对比', name_en: 'Tech Stack Comparison', icon: '⚙️', directions: ['方案 A 优劣', '方案 B 优劣', '综合推荐'], directions_en: ['Option A: pros & cons', 'Option B: pros & cons', 'Recommendation & summary'], description: '技术方案对比决策', description_en: 'Compare technical solutions for decision-making', builtin: true },
 ];
 
 /** P1 #8: 分支颜色调色板 */

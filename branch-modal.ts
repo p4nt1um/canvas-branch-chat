@@ -11,7 +11,7 @@
 import { App, Modal, Setting, ButtonComponent } from 'obsidian';
 import { BranchTemplate, DEFAULT_BRANCH_TEMPLATES, SkillInfo, ModelConfig, BranchFramework } from './types';
 import { SkillSuggestModal } from './skill-suggest-modal';
-import { t } from './locale';
+import { t, getLocale } from './locale';
 
 /** 单个方向的完整描述（文本 + 模型） */
 export interface BranchDirection {
@@ -211,13 +211,14 @@ export class BranchModal extends Modal {
     const tplContainer = contentEl.createDiv({ cls: 'branch-templates-container' });
     tplContainer.createEl('span', { text: t('branch.templates'), cls: 'branch-templates-label' });
     for (const tpl of this.templates) {
+      const displayText = getLocale() === 'en' && tpl.text_en ? tpl.text_en : tpl.text;
       const chip = tplContainer.createEl('button', {
-        text: tpl.text,
+        text: displayText,
         cls: 'branch-template-chip',
       });
       chip.addEventListener('click', (e: Event) => {
         e.preventDefault();
-        this.insertTemplate(tpl.text);
+        this.insertTemplate(displayText);
       });
     }
   }
@@ -229,9 +230,12 @@ export class BranchModal extends Modal {
       .setName(t('branch.framework'))
       .setDesc(t('branch.frameworkDesc'))
       .addDropdown((dropdown) => {
+        const isEn = getLocale() === 'en';
         dropdown.addOption('', t('branch.frameworkSelect'));
         for (const fw of this.frameworks) {
-          dropdown.addOption(fw.id, `${fw.icon || '📋'} ${fw.name}（${fw.directions.length}）${fw.description}`);
+          const fwName = isEn && fw.name_en ? fw.name_en : fw.name;
+          const fwDesc = isEn && fw.description_en ? fw.description_en : fw.description;
+          dropdown.addOption(fw.id, `${fw.icon || '📋'} ${fwName}（${fw.directions.length}）${fwDesc}`);
         }
         dropdown.onChange((value) => {
           if (!value) return;
@@ -245,23 +249,27 @@ export class BranchModal extends Modal {
 
   /** P2 #16: 应用框架到方向列表 */
   private applyFramework(fw: BranchFramework) {
+    const isEn = getLocale() === 'en';
+    const fwName = isEn && fw.name_en ? fw.name_en : fw.name;
+    const directions = isEn && fw.directions_en?.length ? fw.directions_en : fw.directions;
+
     // 检查是否有手输内容
     const hasContent = this.directionTexts.some(t => t.trim().length > 0);
     if (hasContent) {
       // 简单确认：用 Notice 提示后替换
       const confirmEl = this.contentEl.createDiv({ cls: 'branch-framework-confirm' });
-      confirmEl.createEl('p', { text: t('branch.frameworkReplace', { name: fw.name, n: this.directionTexts.length }) });
+      confirmEl.createEl('p', { text: t('branch.frameworkReplace', { name: fwName, n: this.directionTexts.length }) });
       const btnRow = confirmEl.createDiv({ cls: 'branch-framework-confirm-buttons' });
       btnRow.createEl('button', { text: t('branch.frameworkConfirm') }).addEventListener('click', () => {
         confirmEl.remove();
-        this.setDirections(fw.directions);
+        this.setDirections(directions);
       });
       btnRow.createEl('button', { text: t('common.cancel') }).addEventListener('click', () => {
         confirmEl.remove();
       });
       return;
     }
-    this.setDirections(fw.directions);
+    this.setDirections(directions);
   }
 
   /** 设置方向列表 */
