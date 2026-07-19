@@ -1,6 +1,6 @@
 {
 	"name": "canvas-branch-chat",
-	"version": "0.3.1",
+	"version": "0.3.2",
 	"description": "Flowith-style branching AI conversations on Obsidian Canvas.",
 	"main": "main.js",
 	"scripts": {
