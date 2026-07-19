@@ -11,6 +11,7 @@ import { App, Notice, TFile, normalizePath } from 'obsidian';
 import type { CanvasTextData } from 'obsidian/canvas';
 import { CanvasRuntimeView } from './types';
 import { findNodeById, findChildNodeIds, getNodeRole, getNodeText, findParentNodeId } from './context';
+import { t } from './locale';
 
 // ============================================================
 // 类型定义
@@ -148,17 +149,17 @@ function nodeToMarkdown(node: TreeNode, depth: number, lines: string[]): void {
     label = node.modelAlias ? `AI (${node.modelAlias})` : 'AI';
   } else if (node.role === 'branch-point') {
     icon = '🔀';
-    label = '分叉';
+    label = t('export.roleBranch');
   } else if (node.role === 'user') {
     icon = '👤';
-    label = '用户';
+    label = t('export.roleUser');
   } else {
     icon = '📝';
-    label = '节点';
+    label = t('export.roleNode');
   }
 
   // 分支方向标注
-  const branchInfo = node.edgeLabel ? `  ·  *方向：${node.edgeLabel}*` : '';
+  const branchInfo = node.edgeLabel ? `  ·  *${t('export.direction', { dir: node.edgeLabel })}*` : '';
 
   // 输出节点
   if (node.type === 'file' && node.filePath) {
@@ -193,7 +194,7 @@ function nodeToMarkdown(node: TreeNode, depth: number, lines: string[]): void {
     // 多分支时加标注
     if (node.children.length > 1) {
       lines.push('');
-      lines.push(`${indent}  *(以下 ${node.children.length} 条分支)*`);
+      lines.push(`${indent}  ${t('export.branches', { n: node.children.length })}`);
     }
     lines.push('');
     for (const child of node.children) {
@@ -219,7 +220,7 @@ export function exportCanvasConversation(
   // 2. 构建对话树
   const tree = buildTree(canvas, rootId, new Set());
   if (!tree) {
-    new Notice('❌ 无法构建对话树');
+    new Notice(t('notice.exportFail'));
     return;
   }
 
@@ -227,8 +228,8 @@ export function exportCanvasConversation(
   const now = new Date();
   const dateStr = now.toLocaleString('zh-CN');
   const lines: string[] = [
-    '# Canvas 对话导出',
-    `> 导出时间: ${dateStr}`,
+    t('export.title'),
+    t('export.time', { time: dateStr }),
     '',
     '---',
     '',
@@ -240,12 +241,13 @@ export function exportCanvasConversation(
   while (lines.length > 0 && lines[lines.length - 1] === '') {
     lines.pop();
   }
-  lines.push('', '---', '', `*由 Canvas Branch Chat 插件生成*`);
+  lines.push('', '---', '', t('export.footer'));
 
   const markdown = lines.join('\n');
 
   // 4. 保存到 vault
-  const fileName = `对话导出_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}.md`;
+  const fileDate = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+  const fileName = t('export.fileName', { date: fileDate });
   const folder = 'Canvas Exports';
   const filePath = normalizePath(`${folder}/${fileName}`);
 
@@ -257,15 +259,15 @@ export function exportCanvasConversation(
   const existing = app.vault.getAbstractFileByPath(filePath);
   if (existing instanceof TFile) {
     void app.vault.modify(existing, markdown).then(() => {
-      new Notice(`✅ 已更新: ${filePath}`);
+      new Notice(t('notice.exportUpdate', { path: filePath }));
       void app.workspace.openLinkText(filePath, '', true);
     });
   } else {
     void app.vault.create(filePath, markdown).then(() => {
-      new Notice(`✅ 已导出: ${filePath}`);
+      new Notice(t('notice.exportNew', { path: filePath }));
       void app.workspace.openLinkText(filePath, '', true);
     }).catch(err => {
-      new Notice(`❌ 导出失败: ${err}`);
+      new Notice(t('notice.exportError', { error: err }));
     });
   }
 }

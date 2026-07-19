@@ -10,21 +10,22 @@
 import { Notice } from 'obsidian';
 import { CanvasRuntimeNode, CanvasRuntimeView, BBox } from './types';
 import { findChildNodeIds, findNodeById, getNodeRole, findParentNodeId, getNodeCreatedAt } from './context';
+import { t } from './locale';
 
 type AnyCanvas = CanvasRuntimeView & Record<string, unknown>;
 
 type TraversalMode = 'time' | 'depth' | 'breadth';
 
 interface SpeedPreset {
-  label: string;
+  i18nKey: string;
   dwellMs: number;
   overviewMs: number;
 }
 
 const SPEEDS: SpeedPreset[] = [
-  { label: '慢', dwellMs: 5000, overviewMs: 2500 },
-  { label: '中', dwellMs: 3000, overviewMs: 1500 },
-  { label: '快', dwellMs: 1500, overviewMs: 800 },
+  { i18nKey: 'replay.speedSlow', dwellMs: 5000, overviewMs: 2500 },
+  { i18nKey: 'replay.speedMid', dwellMs: 3000, overviewMs: 1500 },
+  { i18nKey: 'replay.speedFast', dwellMs: 1500, overviewMs: 800 },
 ];
 
 // ============================================================
@@ -232,34 +233,34 @@ function createControlBar(total: number, cb: {
     onBtn(b, fn);
     return b;
   };
-  mkBtn('⏮', '上一个 (←)', cb.onPrev);
-  const playBtn = mkBtn('⏸', '暂停/继续 (空格)', cb.onTogglePause);
-  mkBtn('⏭', '下一个 (→)', cb.onNext);
+  mkBtn('⏮', t('replay.prevTooltip'), cb.onPrev);
+  const playBtn = mkBtn('⏸', t('replay.playTooltip'), cb.onTogglePause);
+  mkBtn('⏭', t('replay.nextTooltip'), cb.onNext);
 
   // 中：模式 + 速度
   const mid = el.createDiv({ cls: 'replay-bar-mid' });
 
   const modeT = mid.createEl('button', { cls: 'replay-bar-mode replay-bar-mode-active' });
-  modeT.textContent = 'T 时间线';
+  modeT.textContent = t('replay.modeTime');
   onBtn(modeT, () => cb.onMode('time'));
 
   const modeB = mid.createEl('button', { cls: 'replay-bar-mode' });
-  modeB.textContent = 'B 广度优先';
+  modeB.textContent = t('replay.modeBreadth');
   onBtn(modeB, () => cb.onMode('breadth'));
 
   const modeD = mid.createEl('button', { cls: 'replay-bar-mode' });
-  modeD.textContent = 'D 深度优先';
+  modeD.textContent = t('replay.modeDepth');
   onBtn(modeD, () => cb.onMode('depth'));
 
   const speedWrap = mid.createDiv({ cls: 'replay-bar-speed-wrap' });
   const speedBtn = speedWrap.createEl('button', { cls: 'replay-bar-speed' });
-  speedBtn.textContent = '⏱ 中';
+  speedBtn.textContent = `⏱ ${t('replay.speedMid')}`;
   const speedDrop = speedWrap.createDiv({ cls: 'replay-bar-speed-drop' });
   SPEEDS.forEach((s, i) => {
     const opt = speedDrop.createEl('button', { cls: 'replay-bar-speed-opt' });
-    opt.textContent = s.label;
+    opt.textContent = t(s.i18nKey);
     onBtn(opt, () => {
-      speedBtn.textContent = `⏱ ${s.label}`;
+      speedBtn.textContent = `⏱ ${t(s.i18nKey)}`;
       cb.onSpeed(i);
       speedDrop.toggleClass('show', false);
     });
@@ -278,8 +279,8 @@ function createControlBar(total: number, cb: {
   progress.textContent = `1/${total}`;
 
   const exitBtn = right.createEl('button', { cls: 'replay-bar-exit' });
-  exitBtn.textContent = '✕ 退出';
-  exitBtn.title = '退出回放 (Esc)';
+  exitBtn.textContent = t('replay.exit');
+  exitBtn.title = t('replay.exitTooltip');
   onBtn(exitBtn, cb.onExit);
 
   return {
@@ -324,7 +325,7 @@ export class ReplayController {
       await this.run();
     } catch (err) {
       console.error('[Canvas Branch Chat] Replay error:', err);
-      new Notice(`❌ 回放出错: ${err instanceof Error ? err.message : String(err)}`);
+      new Notice(t('notice.replayError', { error: err instanceof Error ? err.message : String(err) }));
       this.teardown();
     }
   }
@@ -332,7 +333,7 @@ export class ReplayController {
   private async run(): Promise<void> {
     this.rebuild();
     if (this.nodeIds.length === 0) {
-      new Notice('没有可回放的对话节点');
+      new Notice(t('notice.replayEmpty'));
       return;
     }
 

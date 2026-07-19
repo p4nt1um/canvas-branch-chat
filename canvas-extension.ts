@@ -22,6 +22,7 @@ import { parseSkillTag } from './skill-scanner';
 import { MergeModal } from './merge-modal';
 import { FollowUpModal } from './follow-up-modal';
 import { ReplayController } from './replay';
+import { t } from './locale';
 
 export default class CanvasBranchExtension {
   plugin: CanvasBranchChatPlugin;
@@ -59,7 +60,7 @@ export default class CanvasBranchExtension {
   /** P2 #15: 在 system prompt 中注入金字塔摘要引导 */
   private buildSystemPrompt(basePrompt?: string): string {
     const guidance = this.plugin.settings.getSummaryGuidance();
-    const suffix = '\n\n请在回答开头用 2-3 句话概括核心结论，然后再展开详细说明。';
+    const suffix = t('context.summarySuffix');
     if (!basePrompt) return guidance ? suffix.trim() : '';
     return guidance ? basePrompt + suffix : basePrompt;
   }
@@ -68,7 +69,7 @@ export default class CanvasBranchExtension {
   private getModelAndKey(): { model: ModelConfig; apiKey: string } | null {
     const model = this.plugin.settings.getDefaultModel();
     if (!model) {
-      new Notice('请先在设置中添加模型配置');
+      new Notice(t('notice.noModel'));
       return null;
     }
     return this.resolveModelKey(model);
@@ -78,7 +79,7 @@ export default class CanvasBranchExtension {
   private resolveModelKey(model: ModelConfig): { model: ModelConfig; apiKey: string } | null {
     const apiKey = this.plugin.settings.resolveApiKey(model);
     if (!apiKey) {
-      new Notice(`无法解析 API Key，请检查环境变量 "${model.apiKeyEnvVar}" 是否已设置`);
+      new Notice(t('notice.noApiKey', { var: model.apiKeyEnvVar }));
       return null;
     }
     return { model, apiKey };
@@ -94,42 +95,42 @@ export default class CanvasBranchExtension {
 
     // P0 #1: 从此处分叉（弹窗内选模型）
     menu.addItem((item: MenuItem) => {
-      item.setTitle('🔀 从此处分叉');
+      item.setTitle(t('menu.branch'));
       item.setIcon('git-branch');
       item.onClick(() => this.branchFromNode(node, cv));
     });
 
     // P2 #13: 合并分支（从当前节点发起）
     menu.addItem((item: MenuItem) => {
-      item.setTitle('🔀 合并分支');
+      item.setTitle(t('menu.merge'));
       item.setIcon('git-merge');
       item.onClick(() => this.mergeBranches(cv, node));
     });
 
     // P0: 继续追问
     menu.addItem((item: MenuItem) => {
-      item.setTitle('💬 继续追问');
+      item.setTitle(t('menu.followUp'));
       item.setIcon('message-circle');
       item.onClick(() => this.continueChat(node, cv));
     });
 
     // 直接提交到 AI（不带上下文）
     menu.addItem((item: MenuItem) => {
-      item.setTitle('🤖 提交到 AI');
+      item.setTitle(t('menu.submitAI'));
       item.setIcon('bot');
       item.onClick(() => this.submitToAi(node, cv));
     });
 
     // P1 #9: 导出对话树
     menu.addItem((item: MenuItem) => {
-      item.setTitle('📥 导出对话树');
+      item.setTitle(t('menu.export'));
       item.setIcon('download');
       item.onClick(() => exportCanvasConversation(this.plugin.app, cv, node.id));
     });
 
     // P2 #14: 对话回放
     menu.addItem((item: MenuItem) => {
-      item.setTitle('▶️ 回放对话');
+      item.setTitle(t('menu.replay'));
       item.setIcon('play-circle');
       item.onClick(() => {
         const replay = new ReplayController(cv, node.id);
@@ -151,7 +152,7 @@ export default class CanvasBranchExtension {
     if (selectedNodes.length < 2) return;
 
     menu.addItem((item: MenuItem) => {
-      item.setTitle(`🔀 合并 ${selectedNodes.length} 个分支`);
+      item.setTitle(t('menu.mergeN', { n: selectedNodes.length }));
       item.setIcon('git-merge');
       item.onClick(() => {
         // 直接用选中节点列表打开合并弹窗
@@ -166,7 +167,7 @@ export default class CanvasBranchExtension {
           (result) => {
             if (!result.confirmed) return;
             if (result.selectedNodeIds.length < 2) {
-              new Notice('请至少选择 2 个节点进行合并');
+              new Notice(t('merge.needTwo'));
               return;
             }
             void this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
@@ -239,7 +240,7 @@ export default class CanvasBranchExtension {
           x: sourceNode.x + offsetX,
           y: sourceNode.y + yOffset,
         },
-        text: '思考中...',
+        text: t('common.thinking'),
         size: { width: sourceNode.width, height: sourceNode.height },
         focus: false,
       });
@@ -328,12 +329,12 @@ export default class CanvasBranchExtension {
         const model = this.plugin.settings.getModel(result.modelId)
           || this.plugin.settings.getDefaultModel();
         if (!model) {
-          new Notice('请先在设置中添加模型配置');
+          new Notice(t('notice.noModel'));
           return;
         }
         const apiKey = this.plugin.settings.resolveApiKey(model);
         if (!apiKey) {
-          new Notice(`无法解析 API Key，请检查环境变量 "${model.apiKeyEnvVar}"`);
+          new Notice(t('notice.noApiKeyShort', { var: model.apiKeyEnvVar }));
           return;
         }
 
@@ -382,7 +383,7 @@ export default class CanvasBranchExtension {
               x: xPos,
               y: userNode.y + 120 + 50,
             },
-            text: '思考中...',
+            text: t('common.thinking'),
             size: { width: sourceNode.width, height: sourceNode.height },
             focus: false,
           });
@@ -453,7 +454,7 @@ export default class CanvasBranchExtension {
     // 空内容拦截
     const nodeText = sourceNode.text?.trim();
     if (!nodeText) {
-      new Notice('请先输入内容，再提交到 AI');
+      new Notice(t('notice.emptyContent'));
       return;
     }
 
@@ -467,7 +468,7 @@ export default class CanvasBranchExtension {
         x: sourceNode.x,
         y: sourceNode.y + sourceNode.height + 50,
       },
-      text: '思考中...',
+      text: t('common.thinking'),
       size: { width: sourceNode.width, height: sourceNode.height },
       focus: false,
     });
@@ -606,7 +607,7 @@ export default class CanvasBranchExtension {
       (result) => {
         if (!result.confirmed) return;
         if (result.selectedNodeIds.length < 2) {
-          new Notice('请至少选择 2 个节点进行合并');
+          new Notice(t('merge.needTwo'));
           return;
         }
         void this.doMerge(canvas, result.selectedNodeIds, result.prompt, result.modelId);
@@ -624,13 +625,13 @@ export default class CanvasBranchExtension {
     const model = this.plugin.settings.getModel(modelId)
       || this.plugin.settings.getDefaultModel();
     if (!model) {
-      new Notice('请先在设置中添加模型配置');
+      new Notice(t('notice.noModel'));
       return;
     }
 
     const apiKey = this.plugin.settings.resolveApiKey(model);
     if (!apiKey) {
-      new Notice(`无法解析 API Key，请检查环境变量 "${model.apiKeyEnvVar}"`);
+      new Notice(t('notice.noApiKeyShort', { var: model.apiKeyEnvVar }));
       return;
     }
 
@@ -643,7 +644,7 @@ export default class CanvasBranchExtension {
       if (node) sourceNodes.push(node);
     }
     if (sourceNodes.length < 2) {
-      new Notice('未能找到足够的节点');
+      new Notice(t('notice.notEnoughNodes'));
       return;
     }
 
@@ -656,7 +657,7 @@ export default class CanvasBranchExtension {
     // 创建 user 节点（显示用户的提示词）
     const promptNode = canvas.createTextNode({
       pos: { x: centerX, y: maxBottom + 60 },
-      text: userPrompt || '请对以上内容进行总结',
+      text: userPrompt || t('notice.mergeDefaultPrompt'),
       size: { width: maxWidth, height: 120 },
       focus: false,
     });
@@ -666,7 +667,7 @@ export default class CanvasBranchExtension {
     // 创建 assistant 节点（显示总结结果）
     const summaryNode = canvas.createTextNode({
       pos: { x: centerX, y: maxBottom + 60 + 160 },
-      text: '思考中...',
+      text: t('common.thinking'),
       size: { width: maxWidth, height: 200 },
       focus: false,
     });

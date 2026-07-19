@@ -331,6 +331,9 @@ export interface PluginSettingsV2 {
   contextTruncateChars?: number;
   /** P2 #15: system prompt 摘要引导开关 */
   summaryGuidance?: boolean;
+
+  /** 界面语言（'auto' = 跟随系统） */
+  language?: 'auto' | 'zh' | 'en';
 }
 
 /** Provider 默认配置 */

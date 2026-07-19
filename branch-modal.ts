@@ -11,6 +11,7 @@
 import { App, Modal, Setting, ButtonComponent } from 'obsidian';
 import { BranchTemplate, DEFAULT_BRANCH_TEMPLATES, SkillInfo, ModelConfig, BranchFramework } from './types';
 import { SkillSuggestModal } from './skill-suggest-modal';
+import { t } from './locale';
 
 /** 单个方向的完整描述（文本 + 模型） */
 export interface BranchDirection {
@@ -61,10 +62,10 @@ export class BranchModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    new Setting(contentEl).setName('从此处分叉').setHeading();
+    new Setting(contentEl).setName(t('branch.title')).setHeading();
 
     contentEl.createEl('p', {
-      text: '输入分支的探讨方向。每个方向可选不同模型，多模型交叉分析效果更佳。',
+      text: t('branch.desc'),
       cls: 'branch-modal-hint',
     });
 
@@ -92,7 +93,7 @@ export class BranchModal extends Modal {
     // 添加方向按钮
     new Setting(contentEl).addButton((btn: ButtonComponent) => {
       btn
-        .setButtonText('+ 添加方向')
+        .setButtonText(t('branch.addDirection'))
         .onClick(() => {
           if (this.directionTexts.length < 5) {
             this.directionTexts.push('');
@@ -109,12 +110,12 @@ export class BranchModal extends Modal {
     new Setting(contentEl)
       .addButton((btn: ButtonComponent) =>
         btn
-          .setButtonText('分叉')
+          .setButtonText(t('branch.submit'))
           .setCta()
           .onClick(() => this.confirm()),
       )
       .addButton((btn: ButtonComponent) =>
-        btn.setButtonText('取消').onClick(() => this.close()),
+        btn.setButtonText(t('common.cancel')).onClick(() => this.close()),
       );
   }
 
@@ -122,8 +123,8 @@ export class BranchModal extends Modal {
   private renderGlobalModelSelector() {
     const { contentEl } = this;
     new Setting(contentEl)
-      .setName('🌐 全局模型')
-      .setDesc('选择后自动同步到所有方向，单个方向可单独覆盖')
+      .setName(t('branch.globalModel'))
+      .setDesc(t('branch.globalModelDesc'))
       .addDropdown((dropdown) => {
         for (const m of this.models) {
           dropdown.addOption(m.id, `${m.icon || '🤖'} ${m.alias}`);
@@ -143,7 +144,7 @@ export class BranchModal extends Modal {
     this.inputElements = [];
 
     this.directionTexts.forEach((text, index) => {
-      const setting = new Setting(this.directionsContainer!).setName(`方向 ${index + 1}`);
+      const setting = new Setting(this.directionsContainer!).setName(t('branch.directionN', { n: index + 1 }));
 
       // 每方向独立模型下拉
       if (this.models.length > 0) {
@@ -165,7 +166,7 @@ export class BranchModal extends Modal {
 
       // 方向文本输入
       setting.addText((textInput) => {
-        textInput.setPlaceholder('例如：从成本角度分析');
+        textInput.setPlaceholder(t('branch.placeholder'));
         textInput.inputEl.addClass('setting-wide-input');
         textInput.setValue(text);
         textInput.onChange((value) => {
@@ -193,7 +194,7 @@ export class BranchModal extends Modal {
         setting.addExtraButton((btn) => {
           btn
             .setIcon('trash')
-            .setTooltip('删除此方向')
+            .setTooltip(t('branch.deleteTooltip'))
             .onClick(() => {
               this.directionTexts.splice(index, 1);
               this.directionModelIds.splice(index, 1);
@@ -208,7 +209,7 @@ export class BranchModal extends Modal {
   private renderTemplates() {
     const { contentEl } = this;
     const tplContainer = contentEl.createDiv({ cls: 'branch-templates-container' });
-    tplContainer.createEl('span', { text: '快捷模板：', cls: 'branch-templates-label' });
+    tplContainer.createEl('span', { text: t('branch.templates'), cls: 'branch-templates-label' });
     for (const tpl of this.templates) {
       const chip = tplContainer.createEl('button', {
         text: tpl.text,
@@ -225,10 +226,10 @@ export class BranchModal extends Modal {
   private renderFrameworkSelector() {
     const { contentEl } = this;
     new Setting(contentEl)
-      .setName('📋 框架预设')
-      .setDesc('选择框架批量填充方向')
+      .setName(t('branch.framework'))
+      .setDesc(t('branch.frameworkDesc'))
       .addDropdown((dropdown) => {
-        dropdown.addOption('', '— 选择框架 —');
+        dropdown.addOption('', t('branch.frameworkSelect'));
         for (const fw of this.frameworks) {
           dropdown.addOption(fw.id, `${fw.icon || '📋'} ${fw.name}（${fw.directions.length}）${fw.description}`);
         }
@@ -249,13 +250,13 @@ export class BranchModal extends Modal {
     if (hasContent) {
       // 简单确认：用 Notice 提示后替换
       const confirmEl = this.contentEl.createDiv({ cls: 'branch-framework-confirm' });
-      confirmEl.createEl('p', { text: `将用「${fw.name}」替换当前 ${this.directionTexts.length} 个方向，确认？` });
+      confirmEl.createEl('p', { text: t('branch.frameworkReplace', { name: fw.name, n: this.directionTexts.length }) });
       const btnRow = confirmEl.createDiv({ cls: 'branch-framework-confirm-buttons' });
-      btnRow.createEl('button', { text: '确认替换' }).addEventListener('click', () => {
+      btnRow.createEl('button', { text: t('branch.frameworkConfirm') }).addEventListener('click', () => {
         confirmEl.remove();
         this.setDirections(fw.directions);
       });
-      btnRow.createEl('button', { text: '取消' }).addEventListener('click', () => {
+      btnRow.createEl('button', { text: t('common.cancel') }).addEventListener('click', () => {
         confirmEl.remove();
       });
       return;
@@ -279,10 +280,10 @@ export class BranchModal extends Modal {
     const skillContainer = contentEl.createDiv({ cls: 'branch-skills-container' });
 
     new Setting(skillContainer)
-      .setName('🧠 使用 Skill')
-      .setDesc('在方向前加上 /skill-name，AI 将按预设角色展开讨论')
+      .setName(t('branch.skill'))
+      .setDesc(t('branch.skillDesc'))
       .addButton((btn: ButtonComponent) => {
-        btn.setButtonText('浏览所有 Skills').onClick(() => {
+        btn.setButtonText(t('branch.skillBrowse')).onClick(() => {
           new SkillSuggestModal(this.app, this.skills, (skill) => {
             this.insertSkill(`/${skill.name}`);
           }).open();

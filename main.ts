@@ -8,6 +8,7 @@ import { Plugin, Notice } from 'obsidian';
 import SettingsManager from './settings';
 import CanvasBranchExtension from './canvas-extension';
 import { SkillScanner } from './skill-scanner';
+import { t } from './locale';
 
 export default class CanvasBranchChatPlugin extends Plugin {
   settings: SettingsManager;
@@ -32,11 +33,11 @@ export default class CanvasBranchChatPlugin extends Plugin {
     // 3. P1 #9: 注册导出命令
     this.addCommand({
       id: 'export-canvas-conversation',
-      name: '导出当前 Canvas 对话树为 Markdown',
+      name: t('command.exportName'),
       callback: () => {
         // 注意：Obsidian API 不直接暴露 Canvas 视图类型
         // 用户主要通过右键菜单触发导出，这里作为补充入口
-        new Notice('请在 Canvas 中右键对话节点 → 导出对话树');
+        new Notice(t('notice.useMenu'));
       },
     });
 

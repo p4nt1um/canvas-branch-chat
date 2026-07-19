@@ -12,6 +12,7 @@ import { PluginSettingTab, Setting, Notice } from 'obsidian';
 import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS, BranchFramework, DEFAULT_FRAMEWORKS } from './types';
 import { generateId } from './utils';
 import { OpenAIProvider } from './providers';
+import { t, setLocale } from './locale';
 
 // ============================================================
 // 默认设置
@@ -43,6 +44,7 @@ export const DEFAULT_SETTINGS_V2: PluginSettingsV2 = {
   contextRecentFull: 3,
   contextTruncateChars: 500,
   summaryGuidance: true,
+  language: 'auto',
 };
 
 // ============================================================
@@ -119,6 +121,8 @@ export default class SettingsManager {
       this.settings.defaultModelId = this.settings.models[0].id;
       await this.saveSettings();
     }
+    // 应用语言设置
+    setLocale(this.settings.language || 'auto');
   }
 
   async saveSettings() {
@@ -178,6 +182,11 @@ export default class SettingsManager {
     return this.settings.summaryGuidance ?? true;
   }
 
+  /** 获取语言设置 */
+  getLanguage(): 'auto' | 'zh' | 'en' {
+    return this.settings.language || 'auto';
+  }
+
   async setSettings(data: Partial<PluginSettingsV2>) {
     Object.assign(this.settings, data);
     await this.saveSettings();
@@ -187,7 +196,7 @@ export default class SettingsManager {
   async addModel(model?: Partial<ModelConfig>): Promise<ModelConfig> {
     const newModel: ModelConfig = Object.assign({
       id: generateId(8),
-      alias: '新模型',
+      alias: t('settings.newModel'),
       provider: 'deepseek',
       baseUrl: PROVIDER_DEFAULTS.deepseek.baseUrl,
       apiKeyEnvVar: '',
@@ -253,7 +262,28 @@ class SettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName('模型配置').setHeading();
+    // 语言设置（顶部）
+    new Setting(containerEl)
+      .setName(t('settings.language'))
+      .setDesc(t('settings.languageDesc'))
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOptions({
+            auto: t('settings.languageAuto'),
+            zh: '中文',
+            en: 'English',
+          })
+          .setValue(this.manager.getLanguage())
+          .onChange((value) => {
+            const language = value as 'auto' | 'zh' | 'en';
+            void this.manager.setSettings({ language }).then(() => {
+              setLocale(language);
+              this.display(); // 用新语言重新渲染整个设置页
+            });
+          });
+      });
+
+    new Setting(containerEl).setName(t('settings.models')).setHeading();
 
     // 渲染模型列表
     const models = this.manager.getModels();
@@ -263,20 +293,20 @@ class SettingsTab extends PluginSettingTab {
     new Setting(containerEl)
       .addButton((btn) => {
         btn
-          .setButtonText('+ 添加模型')
+          .setButtonText(t('settings.addModel'))
           .onClick(() => {
             void this.manager.addModel().then(() => this.display());
           });
       });
 
     // 全局自定义指令
-    new Setting(containerEl).setName('全局设置').setHeading();
+    new Setting(containerEl).setName(t('settings.global')).setHeading();
     new Setting(containerEl)
-      .setName('全局自定义指令')
-      .setDesc('作为默认系统提示词（单个模型可覆盖此设置）')
+      .setName(t('settings.customInstructions'))
+      .setDesc(t('settings.customInstructionsDesc'))
       .addTextArea((text) => {
         text
-          .setPlaceholder('例如：你是一个专业的产品经理...')
+          .setPlaceholder(t('settings.customInstructionsPh'))
           .setValue(this.manager.getSettings().customInstructions);
         text.inputEl.rows = 3;
         text.inputEl.addClass('setting-wide-input');
@@ -286,11 +316,11 @@ class SettingsTab extends PluginSettingTab {
       });
 
     // P2 #15: 上下文分级压缩设置
-    new Setting(containerEl).setName('📋 上下文压缩').setHeading();
+    new Setting(containerEl).setName(t('settings.compression')).setHeading();
 
     new Setting(containerEl)
-      .setName('最近 N 个节点发全文')
-      .setDesc('最近的 N 个 AI 回答发送全文，更远的截取摘要。user 节点始终全文。')
+      .setName(t('settings.recentFull'))
+      .setDesc(t('settings.recentFullDesc'))
       .addSlider((slider) => {
         slider
           .setLimits(1, 10, 1)
@@ -301,8 +331,8 @@ class SettingsTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('远端节点截取字数')
-      .setDesc('超过 N 个的 AI 回答截取前 M 字发送')
+      .setName(t('settings.truncateChars'))
+      .setDesc(t('settings.truncateCharsDesc'))
       .addSlider((slider) => {
         slider
           .setLimits(100, 2000, 100)
@@ -313,8 +343,8 @@ class SettingsTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName('金字塔摘要引导')
-      .setDesc('在 system prompt 中引导 AI 先概括再展开，配合截取不丢信息')
+      .setName(t('settings.summaryGuide'))
+      .setDesc(t('settings.summaryGuideDesc'))
       .addToggle((toggle) => {
         toggle
           .setValue(this.manager.getSummaryGuidance())
@@ -338,12 +368,12 @@ class SettingsTab extends PluginSettingTab {
     const titleEl = header.createDiv({ cls: 'model-config-title' });
     titleEl.createSpan({ text: `${model.icon || '🤖'} ${model.alias}` });
     if (isDefault) {
-      titleEl.createSpan({ text: ' ⭐默认', cls: 'model-default-badge' });
+      titleEl.createSpan({ text: t('settings.defaultBadge'), cls: 'model-default-badge' });
     }
 
     const headerBtns = header.createDiv({ cls: 'model-config-actions' });
     if (!isDefault) {
-      const setDefaultBtn = headerBtns.createEl('button', { text: '设为默认' });
+      const setDefaultBtn = headerBtns.createEl('button', { text: t('settings.setDefault') });
       setDefaultBtn.addEventListener('click', () => {
         void this.manager.setDefaultModel(model.id).then(() => this.display());
       });
@@ -359,8 +389,8 @@ class SettingsTab extends PluginSettingTab {
 
     // 别名
     new Setting(body)
-      .setName('别名')
-      .setDesc('显示名（如"分析师"、"魔鬼代言人"）')
+      .setName(t('settings.alias'))
+      .setDesc(t('settings.aliasDesc'))
       .addText((text) => {
         text.setValue(model.alias);
         text.onChange((value) => {
@@ -370,10 +400,10 @@ class SettingsTab extends PluginSettingTab {
 
     // Provider
     new Setting(body)
-      .setName('服务商')
+      .setName(t('settings.provider'))
       .addDropdown((dropdown) => {
         dropdown
-          .addOptions({ deepseek: 'DeepSeek', openai: 'OpenAI', custom: '自定义' })
+          .addOptions({ deepseek: 'DeepSeek', openai: 'OpenAI', custom: t('settings.providerCustom') })
           .setValue(model.provider)
           .onChange((value) => {
             const provider = value as 'deepseek' | 'openai' | 'custom';
@@ -389,7 +419,7 @@ class SettingsTab extends PluginSettingTab {
 
     // Base URL
     new Setting(body)
-      .setName('API Endpoint')
+      .setName(t('settings.endpoint'))
       .addText((text) => {
         text.setValue(model.baseUrl);
         text.inputEl.addClass('setting-wide-input');
@@ -400,8 +430,8 @@ class SettingsTab extends PluginSettingTab {
 
     // API Key 环境变量
     new Setting(body)
-      .setName('API Key 环境变量')
-      .setDesc('操作系统环境变量名（如 DEEPSEEK_API_KEY）')
+      .setName(t('settings.apiKeyEnv'))
+      .setDesc(t('settings.apiKeyEnvDesc'))
       .addText((text) => {
         text.setPlaceholder('DEEPSEEK_API_KEY');
         text.setValue(model.apiKeyEnvVar);
@@ -412,20 +442,20 @@ class SettingsTab extends PluginSettingTab {
 
     // 连通性测试（放在环境变量和模型名称之间）
     new Setting(body)
-      .setName('连通性测试')
-      .setDesc('验证 API Key、Endpoint 和网络连通性，测试成功后可选择模型')
+      .setName(t('settings.testConn'))
+      .setDesc(t('settings.testConnDesc'))
       .addButton((btn) => {
         btn
-          .setButtonText('🔌 测试连接')
+          .setButtonText(t('settings.testBtn'))
           .onClick(() => {
             void (async () => {
-              btn.setButtonText('测试中...');
+              btn.setButtonText(t('settings.testing'));
               btn.setDisabled(true);
 
               const apiKey = this.manager.resolveApiKey(model);
               if (!apiKey) {
-                new Notice('❌ 无法解析 API Key，请检查环境变量设置');
-                btn.setButtonText('🔌 测试连接');
+                new Notice(t('notice.testNoKey'));
+                btn.setButtonText(t('settings.testBtn'));
                 btn.setDisabled(false);
                 return;
               }
@@ -433,17 +463,17 @@ class SettingsTab extends PluginSettingTab {
               const provider = new OpenAIProvider(model, apiKey);
               const result = await provider.testConnection();
 
-              btn.setButtonText('🔌 测试连接');
+              btn.setButtonText(t('settings.testBtn'));
               btn.setDisabled(false);
 
               if (result.ok) {
                 const models = result.models || [];
-                new Notice(`✅ 连接成功！发现 ${models.length} 个可用模型`);
+                new Notice(t('notice.testOk', { n: models.length }));
                 // 缓存可用模型列表到配置对象
                 void this.manager.updateModel(model.id, { _availableModels: models });
                 this.display();
               } else {
-                new Notice(`❌ 连接失败: ${result.error}`);
+                new Notice(t('notice.testFail', { error: result.error || '' }));
               }
             })();
           });
@@ -451,7 +481,7 @@ class SettingsTab extends PluginSettingTab {
 
     // 模型名称：测试成功后用下拉框，否则用文本框
     const modelSetting = new Setting(body)
-      .setName('模型名称');
+      .setName(t('settings.modelName'));
 
     if (model._availableModels && model._availableModels.length > 0) {
       // 下拉框模式
@@ -462,7 +492,7 @@ class SettingsTab extends PluginSettingTab {
         }
         // 如果当前模型不在列表里，加一个手动选项
         if (model.model && !options[model.model]) {
-          options[model.model] = `${model.model} (自定义)`;
+          options[model.model] = t('settings.modelCustom', { model: model.model });
         }
         dropdown.addOptions(options);
         dropdown.setValue(model.model);
@@ -470,10 +500,10 @@ class SettingsTab extends PluginSettingTab {
           void this.manager.updateModel(model.id, { model: value });
         });
       });
-      modelSetting.setDesc(`✅ 已获取 ${model._availableModels.length} 个可用模型（来自测试连接）`);
+      modelSetting.setDesc(t('settings.modelNameAuto', { n: model._availableModels.length }));
     } else {
       // 文本框模式
-      modelSetting.setDesc('手动输入模型名称，或先点击上方「测试连接」获取可用模型列表');
+      modelSetting.setDesc(t('settings.modelNameManual'));
       modelSetting.addText((text) => {
         text.setPlaceholder('deepseek-chat');
         text.setValue(model.model);
@@ -485,7 +515,7 @@ class SettingsTab extends PluginSettingTab {
 
     // 颜色
     new Setting(body)
-      .setName('节点颜色')
+      .setName(t('settings.nodeColor'))
       .addDropdown((dropdown) => {
         const options: Record<string, string> = {};
         COLOR_PRESETS.forEach(c => { options[c.value] = c.label; });
@@ -497,8 +527,8 @@ class SettingsTab extends PluginSettingTab {
 
     // 图标
     new Setting(body)
-      .setName('图标')
-      .setDesc('emoji（如 🤖 🔬 🔴）')
+      .setName(t('settings.icon'))
+      .setDesc(t('settings.iconDesc'))
       .addText((text) => {
         text.setValue(model.icon || '');
         text.onChange((value) => {
@@ -508,10 +538,10 @@ class SettingsTab extends PluginSettingTab {
 
     // 系统提示词
     new Setting(body)
-      .setName('系统提示词')
-      .setDesc('该模型的独立人设')
+      .setName(t('settings.systemPrompt'))
+      .setDesc(t('settings.systemPromptDesc'))
       .addTextArea((text) => {
-        text.setPlaceholder('你是一个严谨的分析师...');
+        text.setPlaceholder(t('settings.systemPromptPh'));
         text.setValue(model.systemPrompt);
         text.inputEl.rows = 3;
         text.inputEl.addClass('setting-wide-input');
@@ -522,8 +552,8 @@ class SettingsTab extends PluginSettingTab {
 
     // Temperature
     new Setting(body)
-      .setName('Temperature')
-      .setDesc('0 = 严谨，2 = 发散（默认 0.7）')
+      .setName(t('settings.temperature'))
+      .setDesc(t('settings.temperatureDesc'))
       .addText((text) => {
         text.setValue(String(model.temperature ?? 0.7));
         text.onChange((value) => {
@@ -536,7 +566,7 @@ class SettingsTab extends PluginSettingTab {
 
     // Max Tokens
     new Setting(body)
-      .setName('Max Tokens')
+      .setName(t('settings.maxTokens'))
       .addText((text) => {
         text.setValue(String(model.maxTokens ?? 4096));
         text.onChange((value) => {

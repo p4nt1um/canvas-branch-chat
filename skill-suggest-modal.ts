@@ -6,6 +6,7 @@
 
 import { App, SuggestModal } from 'obsidian';
 import { SkillInfo } from './types';
+import { t } from './locale';
 
 export class SkillSuggestModal extends SuggestModal<SkillInfo> {
   private skills: SkillInfo[];
@@ -15,11 +16,11 @@ export class SkillSuggestModal extends SuggestModal<SkillInfo> {
     super(app);
     this.skills = skills;
     this.onSelect = onSelect;
-    this.setPlaceholder('输入 skill 名称搜索...');
+    this.setPlaceholder(t('skill.placeholder'));
     this.setInstructions([
-      { command: '↑↓', purpose: '选择' },
-      { command: '↵', purpose: '使用此 Skill' },
-      { command: 'esc', purpose: '取消' },
+      { command: '↑↓', purpose: t('skill.hintSelect') },
+      { command: '↵', purpose: t('skill.hintUse') },
+      { command: 'esc', purpose: t('skill.hintCancel') },
     ]);
   }
 
@@ -45,7 +46,7 @@ export class SkillSuggestModal extends SuggestModal<SkillInfo> {
       });
     }
     // 来源标记
-    const sourceTag = skill.source === 'global' ? '🌐 全局' : '📁 项目';
+    const sourceTag = skill.source === 'global' ? t('skill.global') : t('skill.project');
     el.createEl('span', {
       text: sourceTag,
       cls: 'skill-suggest-source',

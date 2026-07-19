@@ -10,6 +10,7 @@ import { ModelConfig, ChatMessage } from './types';
 import { CanvasRuntimeNode, CanvasRuntimeView } from './types';
 import { createProvider } from './providers';
 import { getAncestorChain, buildContextFromChain, getNodeRole, getNodeText, findNodeById } from './context';
+import { t } from './locale';
 
 export interface FollowUpModalResult {
   /** 输入框内容 */
@@ -53,13 +54,13 @@ export class FollowUpModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    new Setting(contentEl).setName('💬 继续追问').setHeading();
+    new Setting(contentEl).setName(t('followUp.title')).setHeading();
 
     // 输入框
     new Setting(contentEl)
-      .setDesc('基于当前对话上下文，输入你的追问')
+      .setDesc(t('followUp.desc'))
       .addTextArea((text) => {
-        text.setPlaceholder('输入追问内容...');
+        text.setPlaceholder(t('followUp.placeholder'));
         text.inputEl.addClass('setting-wide-input', 'setting-min-height-80');
         text.onChange((value) => {
           this.prompt = value;
@@ -71,7 +72,7 @@ export class FollowUpModal extends Modal {
     new Setting(contentEl)
       .addButton((btn) =>
         btn
-          .setButtonText('✨ 智能追问')
+          .setButtonText(t('followUp.smart'))
           .setCta()
           .onClick(() => this.extractCandidates()),
       );
@@ -83,7 +84,7 @@ export class FollowUpModal extends Modal {
     // 模型选择
     if (this.models.length > 0) {
       new Setting(contentEl)
-        .setName('模型')
+        .setName(t('common.model'))
         .addDropdown((dropdown) => {
           for (const m of this.models) {
             dropdown.addOption(m.id, `${m.icon || '🤖'} ${m.alias}`);
@@ -99,12 +100,12 @@ export class FollowUpModal extends Modal {
     new Setting(contentEl)
       .addButton((btn) =>
         btn
-          .setButtonText('发送')
+          .setButtonText(t('common.send'))
           .setCta()
           .onClick(() => this.confirm()),
       )
       .addButton((btn) =>
-        btn.setButtonText('取消').onClick(() => this.close()),
+        btn.setButtonText(t('common.cancel')).onClick(() => this.close()),
       );
   }
 
@@ -198,7 +199,7 @@ export class FollowUpModal extends Modal {
     // 已经是问句直接返回
     if (/[？?]$/.test(point)) return clean + '？';
     // 否则加"请详细说说"
-    return `请详细说说「${clean}」`;
+    return t('followUp.toQuestion', { text: clean });
   }
 
   /** AI 生成：调一次 API 生成候选问题 */
@@ -219,7 +220,7 @@ export class FollowUpModal extends Modal {
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: '根据以下对话内容，生成 3-5 个用户最可能想深入追问的问题。每行一个问题，以「」包裹，不要编号。问题要具体、有针对性。',
+        content: t('followUp.aiPrompt'),
       },
       ...history,
     ];
@@ -248,14 +249,14 @@ export class FollowUpModal extends Modal {
 
     if (this.candidates.length === 0) {
       this.candidateListEl.createEl('p', {
-        text: '未提取到候选问题，请手动输入',
+        text: t('followUp.noCandidates'),
         cls: 'follow-up-no-candidates',
       });
       return;
     }
 
     this.candidateListEl.createEl('p', {
-      text: `从 AI 回答中提取了 ${this.candidates.length} 个候选问题：`,
+      text: t('followUp.candidatesFound', { n: this.candidates.length }),
       cls: 'follow-up-candidates-header',
     });
 
@@ -281,7 +282,7 @@ export class FollowUpModal extends Modal {
 
     // 添加按钮
     const addBtn = this.candidateListEl.createEl('button', {
-      text: '＋ 添加问题',
+      text: t('followUp.addQuestion'),
       cls: 'follow-up-candidate-add',
     });
     addBtn.addEventListener('click', () => {
@@ -310,7 +311,7 @@ export class FollowUpModal extends Modal {
     }
 
     if (all.length === 0) {
-      new Notice('请输入追问内容或提取候选问题');
+      new Notice(t('followUp.empty'));
       return;
     }
 

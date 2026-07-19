@@ -10,6 +10,7 @@
 
 import { CanvasRuntimeNode, CanvasRuntimeView, ChatMessage, CanvasData, ChatNodeData } from './types';
 import type { CanvasTextData } from 'obsidian/canvas';
+import { t } from './locale';
 
 // ============================================================
 // Canvas 边查找
@@ -280,7 +281,7 @@ export function buildContextFromChain(
 
     const text = getNodeText(node).trim();
     if (!text) continue;
-    if (text === 'Loading...' || text === '思考中...') continue;
+    if (text === 'Loading...' || text === t('common.thinking')) continue;
 
     // 从元数据读取角色
     const metaRole = getNodeRole(node);
@@ -296,7 +297,7 @@ export function buildContextFromChain(
       assistantSeen++;
       // P2 #15: 超过最近 N 个的 assistant 节点截取前 M 字
       if (assistantSeen > recentFullCount && cleanText.length > truncateChars) {
-        cleanText = cleanText.substring(0, truncateChars) + '\n\n[... 已截取 ...]';
+        cleanText = cleanText.substring(0, truncateChars) + t('export.truncated');
       }
     }
 
@@ -390,11 +391,11 @@ export function buildMergeContext(
     const node = findNodeById(canvas, sourceNodeIds[i]);
     if (!node) continue;
     const text = getNodeText(node).trim();
-    if (!text || text === '思考中...' || text === 'Loading...') continue;
+    if (!text || text === t('common.thinking') || text === 'Loading...') continue;
 
     const edgeLabel = findEdgeLabel(canvas, sourceNodeIds[i]);
     const label = edgeLabel ? `（${edgeLabel}）` : '';
-    branches.push(`--- 分支 ${i + 1}${label} ---\n${text}`);
+    branches.push(`${t('context.branchSeparator', { n: i + 1, label: label })}\n${text}`);
   }
 
   messages.push({

@@ -8,6 +8,7 @@ import { App, Modal, Setting } from 'obsidian';
 import { ModelConfig } from './types';
 import { CanvasRuntimeNode, CanvasRuntimeView } from './types';
 import { getNodeRole, getNodeText } from './context';
+import { t } from './locale';
 
 export interface MergeModalResult {
   prompt: string;
@@ -17,7 +18,7 @@ export interface MergeModalResult {
 }
 
 export class MergeModal extends Modal {
-  private prompt: string = '总结以上观点';
+  private prompt: string = t('merge.promptPlaceholder');
   private modelId: string;
   private result: MergeModalResult;
   private onSubmit: (result: MergeModalResult) => void;
@@ -52,10 +53,10 @@ export class MergeModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
 
-    new Setting(contentEl).setName('🔀 合并分支').setHeading();
+    new Setting(contentEl).setName(t('merge.title')).setHeading();
 
     // 节点选择列表
-    new Setting(contentEl).setName('选择要合并的节点').setHeading();
+    new Setting(contentEl).setName(t('merge.selectNodes')).setHeading();
     const nodeList = contentEl.createDiv({ cls: 'merge-node-list' });
 
     const candidates = this.getCandidateNodes();
@@ -84,16 +85,16 @@ export class MergeModal extends Modal {
         cls: isCurrent ? 'merge-node-current' : '',
       });
       if (isCurrent) {
-        row.createEl('span', { text: '（当前）', cls: 'merge-node-current-tag' });
+        row.createEl('span', { text: t('merge.currentTag'), cls: 'merge-node-current-tag' });
       }
     }
 
     // 提问输入
-    new Setting(contentEl).setName('提问').setHeading();
+    new Setting(contentEl).setName(t('merge.promptHeading')).setHeading();
     new Setting(contentEl)
-      .setDesc('可以是总结、对比、或其他任何问题')
+      .setDesc(t('merge.promptDesc'))
       .addTextArea((text) => {
-        text.setPlaceholder('总结以上观点');
+        text.setPlaceholder(t('merge.promptPlaceholder'));
         text.setValue(this.prompt);
         text.inputEl.addClass('setting-wide-input', 'setting-min-height-60');
         text.onChange((value) => {
@@ -105,7 +106,7 @@ export class MergeModal extends Modal {
     // 模型选择
     if (this.models.length > 0) {
       new Setting(contentEl)
-        .setName('模型')
+        .setName(t('common.model'))
         .addDropdown((dropdown) => {
           for (const m of this.models) {
             dropdown.addOption(m.id, `${m.icon || '🤖'} ${m.alias}`);
@@ -121,12 +122,12 @@ export class MergeModal extends Modal {
     new Setting(contentEl)
       .addButton((btn) =>
         btn
-          .setButtonText('合并')
+          .setButtonText(t('merge.submit'))
           .setCta()
           .onClick(() => this.confirm()),
       )
       .addButton((btn) =>
-        btn.setButtonText('取消').onClick(() => this.close()),
+        btn.setButtonText(t('common.cancel')).onClick(() => this.close()),
       );
   }
 
@@ -142,7 +143,7 @@ export class MergeModal extends Modal {
 
     return allNodes.filter((n: CanvasRuntimeNode) => {
       const text = getNodeText(n).trim();
-      return text && text !== '思考中...' && text !== 'Loading...';
+      return text && text !== t('common.thinking') && text !== 'Loading...';
     });
   }
 
