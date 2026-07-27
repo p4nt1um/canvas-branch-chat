@@ -278,7 +278,8 @@ export default class CanvasBranchExtension {
     // 并行请求所有方向（每方向独立模型）
     await Promise.allSettled(
       branches.map(async ({ answerNode, messages, model, apiKey }) => {
-        const provider = createProvider(model, apiKey);
+        const baseUrl = this.plugin.settings.resolveBaseUrl(model);
+        const provider = createProvider(model, apiKey, baseUrl);
         let fullText = '';
 
         try {
@@ -413,7 +414,8 @@ export default class CanvasBranchExtension {
           messages.push(...historyMessages);
 
           // 4. 流式请求
-          const provider = createProvider(model, apiKey);
+          const baseUrl = this.plugin.settings.resolveBaseUrl(model);
+          const provider = createProvider(model, apiKey, baseUrl);
           let fullText = '';
 
           try {
@@ -485,7 +487,8 @@ export default class CanvasBranchExtension {
     }
     messages.push({ role: 'user', content: sourceNode.text });
 
-    const provider = createProvider(model, apiKey);
+    const baseUrl = this.plugin.settings.resolveBaseUrl(model);
+    const provider = createProvider(model, apiKey, baseUrl);
     let fullText = '';
 
     try {
@@ -694,7 +697,8 @@ export default class CanvasBranchExtension {
     );
 
     // 流式请求
-    const provider = createProvider(model, apiKey);
+    const baseUrl = this.plugin.settings.resolveBaseUrl(model);
+    const provider = createProvider(model, apiKey, baseUrl);
     let fullText = '';
 
     try {

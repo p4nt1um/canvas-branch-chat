@@ -85,7 +85,9 @@ export const en: Record<string, string> = {
   'settings.providerCustom': 'Custom',
   'settings.endpoint': 'API Endpoint',
   'settings.apiKeyEnv': 'API Key environment variable',
-  'settings.apiKeyEnvDesc': 'OS environment variable name (e.g., DEEPSEEK_API_KEY)',
+  'settings.apiKeyEnvDesc': 'Env var name (e.g., DEEPSEEK_API_KEY). Matching _BASE_URL prefix overrides Base URL. Priority: Direct input > Plugin .env > Vault .env > System env. Place .env at .obsidian/plugins/canvas-branch-chat/.env',
+  'settings.apiKeyDirect': 'API Key direct input',
+  'settings.apiKeyDirectDesc': 'Enter key directly (stored in data.json, highest priority). Prefer using .env file to avoid storing secrets in synced config.',
   'settings.testConn': 'Connection test',
   'settings.testConnDesc': 'Verify API Key, endpoint, and connectivity. Models become selectable after success.',
   'settings.testBtn': '🔌 Test connection',
@@ -109,9 +111,9 @@ export const en: Record<string, string> = {
 
   // ── Notices ──
   'notice.noModel': 'Please add a model configuration in settings first',
-  'notice.noApiKey': 'Cannot resolve API Key. Check environment variable "{var}"',
-  'notice.noApiKeyShort': 'Cannot resolve API Key. Check environment variable "{var}"',
-  'notice.testNoKey': '❌ Cannot resolve API Key. Please check environment variable settings.',
+  'notice.noApiKey': 'Cannot resolve API Key. Check .env file or environment variable "{var}"',
+  'notice.noApiKeyShort': 'Cannot resolve API Key. Check .env file or env var "{var}"',
+  'notice.testNoKey': '❌ Cannot resolve API Key. Check .env file, system env var, or enter key directly.',
   'notice.testOk': '✅ Connected! Found {n} available models',
   'notice.testFail': '❌ Connection failed: {error}',
   'notice.exportFail': '❌ Cannot build conversation tree',

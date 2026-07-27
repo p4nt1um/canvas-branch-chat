@@ -7,11 +7,13 @@
  * 3. 设置页 UI 改为动态模型列表
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import CanvasBranchChatPlugin from './main';
 import { PluginSettingTab, Setting, Notice } from 'obsidian';
 import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS, BranchFramework, DEFAULT_FRAMEWORKS } from './types';
 import { generateId } from './utils';
-import { OpenAIProvider } from './providers';
+import { createProvider } from './providers';
 import { t, setLocale } from './locale';
 
 // ============================================================
@@ -102,12 +104,23 @@ function migrateSettings(data: unknown): PluginSettingsV2 {
 // 设置管理器
 // ============================================================
 
+/**
+ * 跨平台环境变量读取策略：
+ * macOS/Windows GUI 应用（含 Obsidian）无法读取 shell 环境变量（.zshrc/.bashrc），
+ * 因此提供四层降级：
+ *   直接 API Key → 插件目录 .env → vault 根 .env → process.env
+ * .env 优先放在插件目录（.obsidian/plugins/canvas-branch-chat/.env），
+ * 避免和其他插件的 .env 冲突；同时降级到 vault 根 .env 向后兼容旧用户。
+ */
+
 export default class SettingsManager {
   static SETTINGS_CHANGED_EVENT = 'canvas-branch-chat:settings-changed';
 
   private plugin: CanvasBranchChatPlugin;
   private settings: PluginSettingsV2;
   private settingsTab: SettingsTab;
+  /** 从 vault 根目录 .env 文件解析的缓存 */
+  private envCache: Record<string, string> = {};
 
   constructor(plugin: CanvasBranchChatPlugin) {
     this.plugin = plugin;
@@ -123,6 +136,8 @@ export default class SettingsManager {
     }
     // 应用语言设置
     setLocale(this.settings.language || 'auto');
+    // 加载 vault .env 文件（跨平台兜底：macOS/Windows GUI 读不到 shell env）
+    await this.loadEnvFile();
   }
 
   async saveSettings() {
@@ -145,11 +160,90 @@ export default class SettingsManager {
     return this.settings.models;
   }
 
-  /** 从模型配置解析 API Key */
+  /**
+   * 解析 .env 文本内容为 key-value 缓存
+   * 格式：KEY=VALUE，支持 # 注释和空行
+   */
+  private parseEnvContent(content: string): Record<string, string> {
+    const cache: Record<string, string> = {};
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex === -1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      const value = trimmed.slice(eqIndex + 1).trim();
+      if (key && value) {
+        cache[key] = value;
+      }
+    }
+    return cache;
+  }
+
+  /**
+   * 加载 .env 文件并缓存（四层降级的一部分）
+   * 优先从插件目录读取（隔离、不和其他插件冲突），
+   * 降级到 vault 根目录向后兼容旧用户。
+   */
+  private async loadEnvFile(): Promise<void> {
+    // 1. 优先：插件目录 .env（隔离，不和其它插件打架）
+    try {
+      const vaultBasePath = (this.plugin.app.vault.adapter as any).basePath || '';
+      const pluginEnvPath = path.join(vaultBasePath, '.obsidian', 'plugins', 'canvas-branch-chat', '.env');
+      const content = await fs.promises.readFile(pluginEnvPath, 'utf-8');
+      this.envCache = this.parseEnvContent(content);
+      console.log('[Canvas Branch Chat] Loaded .env from plugin directory');
+      return;
+    } catch {
+      // 插件目录无 .env，继续降级
+    }
+
+    // 2. 降级：vault 根目录 .env（向后兼容旧版用户）
+    try {
+      const envFile = await this.plugin.app.vault.adapter.read('.env');
+      this.envCache = this.parseEnvContent(envFile);
+      console.log('[Canvas Branch Chat] Loaded .env from vault root (fallback)');
+      return;
+    } catch {
+      this.envCache = {};
+    }
+  }
+
+  /** 从模型配置解析 API Key（四层降级：直接 Key → 插件 .env → vault .env → process.env） */
   resolveApiKey(model: ModelConfig): string {
+    // 1. 优先使用直接配置的 API Key（设置面板输入，最可靠）
+    if (model.apiKey?.trim()) return model.apiKey.trim();
+
     const envVarName = model.apiKeyEnvVar?.trim();
     if (!envVarName) return '';
+
+    // 2. 从 vault .env 文件读取（跨平台，macOS/Windows 可用）
+    if (this.envCache[envVarName]) return this.envCache[envVarName];
+
+    // 3. 从 system process.env 读取（终端启动 Obsidian 时有效）
     return process.env[envVarName] || '';
+  }
+
+  /**
+   * 从 .env / 系统环境变量解析 Base URL
+   * 约定：如果 apiKeyEnvVar = "DEEPSEEK_API_KEY"，则对应的 Base URL 变量名为 "DEEPSEEK_BASE_URL"
+   * 读取优先级同 API Key：插件 .env → vault .env → process.env
+   */
+  resolveBaseUrl(model: ModelConfig): string {
+    const envVarName = model.apiKeyEnvVar?.trim();
+    if (!envVarName) return model.baseUrl;
+
+    // 将 _API_KEY 替换为 _BASE_URL（如 DEEPSEEK_API_KEY → DEEPSEEK_BASE_URL）
+    const baseUrlVar = envVarName.replace(/_API_KEY$/, '_BASE_URL');
+
+    // 1. 插件/vault .env 缓存
+    if (this.envCache[baseUrlVar]) return this.envCache[baseUrlVar];
+
+    // 2. 系统环境变量
+    if (process.env[baseUrlVar]) return process.env[baseUrlVar];
+
+    // 3. 降级到设置面板配置的 baseUrl
+    return model.baseUrl;
   }
 
   /** 兼容旧接口：获取默认模型的 API Key */
@@ -468,6 +562,19 @@ class SettingsTab extends PluginSettingTab {
         });
       });
 
+    // API Key 直接输入（解决 Ubuntu 24 等环境无法读取 env var 的问题）
+    new Setting(body)
+      .setName(t('settings.apiKeyDirect'))
+      .setDesc(t('settings.apiKeyDirectDesc'))
+      .addText((text) => {
+        text.inputEl.type = 'password';
+        text.setPlaceholder('sk-...');
+        text.setValue(model.apiKey || '');
+        text.onChange((value) => {
+          void this.manager.updateModel(model.id, { apiKey: value || undefined });
+        });
+      });
+
     // 连通性测试（放在环境变量和模型名称之间）
     new Setting(body)
       .setName(t('settings.testConn'))
@@ -488,7 +595,8 @@ class SettingsTab extends PluginSettingTab {
                 return;
               }
 
-              const provider = new OpenAIProvider(model, apiKey);
+              const baseUrl = this.manager.resolveBaseUrl(model);
+              const provider = createProvider(model, apiKey, baseUrl);
               const result = await provider.testConnection();
 
               btn.setButtonText(t('settings.testBtn'));

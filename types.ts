@@ -230,6 +230,8 @@ export interface ModelConfig {
   baseUrl: string;
   /** API Key 环境变量名 */
   apiKeyEnvVar: string;
+  /** API Key 直接配置（优先于环境变量，存在 Obsidian data.json 中） */
+  apiKey?: string;
   /** 模型名称 */
   model: string;
   /** Canvas 节点颜色 */

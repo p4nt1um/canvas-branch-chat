@@ -85,7 +85,9 @@ export const zh: Record<string, string> = {
   'settings.providerCustom': '自定义',
   'settings.endpoint': 'API Endpoint',
   'settings.apiKeyEnv': 'API Key 环境变量',
-  'settings.apiKeyEnvDesc': '操作系统环境变量名（如 DEEPSEEK_API_KEY）',
+  'settings.apiKeyEnvDesc': '环境变量名（如 DEEPSEEK_API_KEY）。同前缀 _BASE_URL 变量可自动覆盖 Base URL。优先级：直接输入 > 插件 .env > Vault .env > 系统环境。.env 放在 .obsidian/plugins/canvas-branch-chat/.env，避免与其他插件冲突。',
+  'settings.apiKeyDirect': 'API Key 直接输入',
+  'settings.apiKeyDirectDesc': '直接填入 Key（存在 data.json，最高优先级）。建议优先使用 .env 文件存储 Key，避免明文进配置同步。',
   'settings.testConn': '连通性测试',
   'settings.testConnDesc': '验证 API Key、Endpoint 和网络连通性，测试成功后可选择模型',
   'settings.testBtn': '🔌 测试连接',
@@ -109,9 +111,9 @@ export const zh: Record<string, string> = {
 
   // ── Notice 提示 ──
   'notice.noModel': '请先在设置中添加模型配置',
-  'notice.noApiKey': '无法解析 API Key，请检查环境变量 "{var}" 是否已设置',
-  'notice.noApiKeyShort': '无法解析 API Key，请检查环境变量 "{var}"',
-  'notice.testNoKey': '❌ 无法解析 API Key，请检查环境变量设置',
+  'notice.noApiKey': '无法解析 API Key，请检查 .env 文件或系统环境变量 "{var}" 是否已设置',
+  'notice.noApiKeyShort': '无法解析 API Key，请检查 .env 文件或环境变量 "{var}"',
+  'notice.testNoKey': '❌ 无法解析 API Key，请检查 .env 文件、系统环境变量，或直接在 API Key 输入框填入',
   'notice.testOk': '✅ 连接成功！发现 {n} 个可用模型',
   'notice.testFail': '❌ 连接失败: {error}',
   'notice.exportFail': '❌ 无法构建对话树',

@@ -12,13 +12,15 @@ import { OpenAIProvider } from './openai-provider';
  * 根据模型配置创建对应的 Provider 实例
  * @param model 模型配置
  * @param apiKey 已解析的 API Key
+ * @param resolvedBaseUrl 已解析的 Base URL（覆盖 model.baseUrl，来自 .env / 系统环境变量）
  */
-export function createProvider(model: ModelConfig, apiKey: string): ChatProvider {
-  const providerType = model.providerType || 'openai';
+export function createProvider(model: ModelConfig, apiKey: string, resolvedBaseUrl?: string): ChatProvider {
+  const resolvedModel = resolvedBaseUrl ? { ...model, baseUrl: resolvedBaseUrl } : model;
+  const providerType = resolvedModel.providerType || 'openai';
 
   switch (providerType) {
     case 'openai':
-      return new OpenAIProvider(model, apiKey);
+      return new OpenAIProvider(resolvedModel, apiKey);
     // 未来扩展点:
     // case 'claude-cli':
     //   return new ClaudeCLIProvider(model, apiKey);
