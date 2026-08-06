@@ -29,7 +29,7 @@ Flowith-style branching AI conversations on Obsidian Canvas. Fork from any node,
 
 ---
 
-**最新版本**: v0.3.4 | **更新**: 2026-07-27 | **发布**: [GitHub Releases](https://github.com/p4nt1um/canvas-branch-chat/releases)
+**最新版本**: v0.4.0 | **更新**: 2026-08-06 | **发布**: [GitHub Releases](https://github.com/p4nt1um/canvas-branch-chat/releases)
 
 ---
 
@@ -67,6 +67,11 @@ Flowith-style branching AI conversations on Obsidian Canvas. Fork from any node,
 | 🌐 多语言 | 简体中文 / English，跟随系统自动切换 | ✅ |
 | 🔑 跨平台 API Key | 四层降级策略，支持 .env 文件和直接输入 | ✅ |
 | 🌐 BASE_URL 自动匹配 | 读取 API Key 环境变量时自动匹配 BASE_URL | ✅ |
+| 🌐 导出交互式 HTML | 单文件 HTML，移动端适配，Markdown 预渲染，离线查看 | ✅ |
+| 🎬 对话回放（HTML） | 逐步高亮节点，速度可调，进度条显示 | ✅ |
+| 🔍 全文搜索（HTML） | 搜索结果高亮，前后导航 | ✅ |
+| 🌓 主题切换（HTML） | 亮色/暗色/跟随系统 | ✅ |
+| 📱 移动端适配 | 响应式布局，触摸优化，手势操作 | ✅ |
 
 ### 效果示意
 
@@ -184,7 +189,22 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com/v1  # 可选
    - **💬 继续追问** — 在当前分支链上继续对话
    - **🤖 提交到 AI** — 单次问答，不带历史
    - **📥 导出对话树** — 将整棵对话树导出为 Markdown
+   - **🌐 导出交互式 HTML** — 导出为单文件 HTML（移动端友好）
 4. AI 回答实时流式显示在 Canvas 节点中
+
+### 导出交互式 HTML
+
+导出的 HTML 文件特点：
+- **单文件**：CSS/JS 全部内嵌，无需联网
+- **移动端适配**：响应式布局，触摸友好
+- **Markdown 渲染**：代码块、表格、列表完美显示
+- **对话回放**：逐步高亮节点，回顾讨论过程
+- **全文搜索**：快速定位对话内容
+- **主题切换**：亮色/暗色/跟随系统
+
+文件命名：`根节点第一句话_YYYYMMDD_HHMMSS.html`
+
+兼容性：Chrome/Safari/Firefox/Edge + iOS Safari/Android Chrome
 
 ### 技术栈
 
@@ -230,6 +250,11 @@ This is not "yet another AI chat plugin" — Obsidian already has Text Generator
 | 🌐 i18n | 简体中文 / English, auto-detect system locale | ✅ |
 | 🔑 Cross-platform API Key | Four-tier fallback strategy, supports .env files and direct input | ✅ |
 | 🌐 BASE_URL auto-match | Auto-match BASE_URL when reading API Key env variable | ✅ |
+| 🌐 Export interactive HTML | Single-file HTML, mobile-friendly, offline viewing | ✅ |
+| 🎬 Dialogue replay (HTML) | Step-by-step highlighting, speed control, progress bar | ✅ |
+| 🔍 Full-text search (HTML) | Search result highlighting, prev/next navigation | ✅ |
+| 🌓 Theme switching (HTML) | Light/Dark/Auto, CSS variables | ✅ |
+| 📱 Mobile adaptation | Responsive layout, touch optimization, gestures | ✅ |
 
 ### Example
 
