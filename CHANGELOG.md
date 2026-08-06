@@ -1,5 +1,19 @@
 # Canvas Branch Chat — 版本历史
 
+## 0.4.5 (2026-08-07)
+**🔥 修复设置页控件不显示（Obsidian 1.13+ 兼容）**
+
+### 🐛 根本原因
+- Obsidian 1.13+ 中，实现 `getSettingDefinitions()` 后设置页改用声明式渲染
+- 声明式定义只含 name/description，**不含控件**，且 `display()` 不再被调用
+- 导致设置页只显示标题、没有下拉框/滑动条/开关/按钮
+
+### 🔧 修复
+- **移除 `getSettingDefinitions()`** — 恢复纯 `display()` 渲染，所有控件正常显示
+- 兼容 Obsidian 1.6.5+（老版本本来就用 display()）
+
+---
+
 ## 0.4.4 (2026-08-07)
 **彻底清理审核问题 + 修复导出弹窗**
 
