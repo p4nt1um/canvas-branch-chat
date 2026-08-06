@@ -1,6 +1,16 @@
 # Canvas Branch Chat — 版本历史
 
-## v0.4.0 (2026-08-06)
+## 0.4.1 (2026-08-06)
+**导出配置弹窗 UI 修复**
+
+### 🐛 修复
+- 修复导出配置弹窗控件不显示（Setting API → 直接 DOM 操作）
+- 添加 Modal 布局 CSS（export-setting-row、export-label）
+- checkbox 复用 Obsidian 原生 .checkbox-container 样式
+
+---
+
+## 0.4.0 (2026-08-06)
 **导出交互式 HTML + 移动端适配**
 
 ### 新功能
