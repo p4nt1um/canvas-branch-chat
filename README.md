@@ -29,6 +29,10 @@ Flowith-style branching AI conversations on Obsidian Canvas. Fork from any node,
 
 ---
 
+**最新版本**: v0.3.4 | **更新**: 2026-07-27 | **发布**: [GitHub Releases](https://github.com/p4nt1um/canvas-branch-chat/releases)
+
+---
+
 ## 简体中文
 
 ### 这是什么？
@@ -61,6 +65,8 @@ Flowith-style branching AI conversations on Obsidian Canvas. Fork from any node,
 | 🔀 分支合并 | 多分支合并为总结节点 | ✅ |
 | ▶️ 回放对话 | 按时间线/广度/深度回放整棵对话树 | ✅ |
 | 🌐 多语言 | 简体中文 / English，跟随系统自动切换 | ✅ |
+| 🔑 跨平台 API Key | 四层降级策略，支持 .env 文件和直接输入 | ✅ |
+| 🌐 BASE_URL 自动匹配 | 读取 API Key 环境变量时自动匹配 BASE_URL | ✅ |
 
 ### 效果示意
 
@@ -97,31 +103,74 @@ npm run build
 
 ### 配置
 
-#### API Key（安全方案）
+#### API Key 配置（安全方案）
 
-插件**不会明文存储你的密钥**，而是通过操作系统环境变量读取：
+插件支持**四种 API Key 配置方式**，按优先级从高到低：
 
-**第一步：在操作系统中设置环境变量**
+```
+1. 设置面板直接输入（最高优先级）
+   ↓
+2. 插件目录 .env 文件
+   ↓
+3. Vault 根 .env 文件
+   ↓
+4. 系统环境变量（最低优先级）
+```
 
-- **macOS / Linux**：在终端编辑 `~/.bashrc` 或 `~/.zshrc`，添加：
+**方式一：设置面板直接输入**（推荐，最简单）
+
+1. 设置页 → 模型配置
+2. 找到「API Key」输入框
+3. 直接填入你的密钥（密码框显示，存储在 `data.json`）
+
+**方式二：使用 .env 文件**
+
+创建 `.env` 文件（选择以下任意位置）：
+
+- 插件目录：`.obsidian/plugins/canvas-branch-chat/.env`
+- Vault 根：`你的vault/.env`
+
+文件内容：
+```bash
+DEEPSEEK_API_KEY=你的密钥
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1  # 可选
+```
+
+**方式三：系统环境变量**（适合开发者）
+
+- **macOS / Linux**：编辑 `~/.bashrc` 或 `~/.zshrc`，添加：
   ```bash
   export DEEPSEEK_API_KEY=你的密钥
   ```
-  保存后执行 `source ~/.bashrc` 生效。
-- **Windows**：搜索「环境变量」→ 系统属性 → 新建用户变量，变量名填 `DEEPSEEK_API_KEY`，值填你的密钥。
+  保存后执行 `source ~/.bashrc`。
+- **Windows**：搜索「环境变量」→ 系统属性 → 新建用户变量。
 
-设置完成后**重启 Obsidian**，确保环境变量被加载。
+设置完成后**重启 Obsidian**，确保配置被加载。
 
-**第二步：在插件设置中填入变量名**
+**BASE_URL 自动匹配**
 
-只需要填变量名称 `DEEPSEEK_API_KEY`，不需要填真实密钥。
+如果使用 `.env` 文件配置 `DEEPSEEK_API_KEY`，插件会自动读取同文件中的 `DEEPSEEK_BASE_URL` 并覆盖设置面板的 Base URL 配置。
+
+**安全提示**：
+- ✅ 方式一（直接输入）存储在本地 `data.json`，仅自己可见
+- ✅ 方式二（.env 文件）不会提交到版本控制
+- ✅ 方式三（环境变量）最安全，不写入任何文件
+- ❌ 不要将密钥提交到 Git 仓库
 
 #### 模型配置
 
 1. 设置页 → 添加模型
-2. 填写别名、Provider、Base URL、API Key 环境变量名
+2. 填写配置：
+   - **别名**：显示名（如「分析师」）
+   - **Provider**：deepseek / openai / custom
+   - **Base URL**：API endpoint
+   - **API Key**：选择方式（直接输入 / 环境变量名）
 3. 点击「测试连接」验证连通性并获取可用模型列表
-4. 选择模型，配置颜色、图标、系统提示词
+4. 选择模型，配置：
+   - **颜色**：节点边框/背景色
+   - **图标**：节点小标识（🔬🔴🔵）
+   - **系统提示词**：模型人设
+   - **Temperature**：创造性 vs 严谨
 
 支持任意 OpenAI 兼容 API（DeepSeek、OpenAI、Ollama 本地模型等）。
 
@@ -179,6 +228,8 @@ This is not "yet another AI chat plugin" — Obsidian already has Text Generator
 | 🔀 Branch merging | Combine multiple branches into a summary node | ✅ |
 | ▶️ Replay | Step through the conversation tree chronologically | ✅ |
 | 🌐 i18n | 简体中文 / English, auto-detect system locale | ✅ |
+| 🔑 Cross-platform API Key | Four-tier fallback strategy, supports .env files and direct input | ✅ |
+| 🌐 BASE_URL auto-match | Auto-match BASE_URL when reading API Key env variable | ✅ |
 
 ### Example
 
@@ -215,31 +266,74 @@ Copy the generated `main.js`, `manifest.json`, `styles.css` to the plugin direct
 
 ### Configuration
 
-#### API Key (Secure)
+#### API Key Configuration (Secure)
 
-The plugin **does not store your key in plaintext**. Instead, it reads from OS environment variables:
+The plugin supports **four API Key configuration methods** (high to low priority):
 
-**Step 1: Set the environment variable in your OS**
+```
+1. Direct input in settings (highest priority)
+   ↓
+2. Plugin directory .env file
+   ↓
+3. Vault root .env file
+   ↓
+4. System environment variables (lowest priority)
+```
+
+**Method 1: Direct Input in Settings** (Recommended, Simplest)
+
+1. Settings → Model configuration
+2. Find "API Key" input field
+3. Enter your key directly (password field, stored in `data.json`)
+
+**Method 2: Use .env File**
+
+Create `.env` file (choose any of these locations):
+
+- Plugin directory: `.obsidian/plugins/canvas-branch-chat/.env`
+- Vault root: `your-vault/.env`
+
+File content:
+```bash
+DEEPSEEK_API_KEY=your-key-here
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1  # optional
+```
+
+**Method 3: System Environment Variables** (For developers)
 
 - **macOS / Linux**: Edit `~/.bashrc` or `~/.zshrc`:
   ```bash
   export DEEPSEEK_API_KEY=your-key-here
   ```
   Then run `source ~/.bashrc`.
-- **Windows**: Search "Environment Variables" → System Properties → New user variable. Name: `DEEPSEEK_API_KEY`, Value: your key.
+- **Windows**: Search "Environment Variables" → System Properties → New user variable.
 
-**Restart Obsidian** after setting the variable.
+**Restart Obsidian** after configuration.
 
-**Step 2: Enter the variable name in plugin settings**
+**BASE_URL Auto-Match**
 
-Just enter the variable name `DEEPSEEK_API_KEY`, not the actual key.
+When using `.env` file with `DEEPSEEK_API_KEY`, the plugin automatically reads `DEEPSEEK_BASE_URL` from the same file and overrides the Base URL in settings.
+
+**Security Tips**:
+- ✅ Method 1 (direct input) stores in local `data.json`, visible only to you
+- ✅ Method 2 (.env file) won't be committed to version control
+- ✅ Method 3 (env vars) is most secure, not written to any file
+- ❌ Never commit keys to Git repository
 
 #### Model Configuration
 
 1. Settings → Add Model
-2. Fill in alias, Provider, Base URL, API Key env var name
+2. Fill in:
+   - **Alias**: Display name (e.g., "Analyst")
+   - **Provider**: deepseek / openai / custom
+   - **Base URL**: API endpoint
+   - **API Key**: Choose method (direct input / env var name)
 3. Click "Test Connection" to verify and fetch available models
-4. Select model, configure color, icon, system prompt
+4. Select model, configure:
+   - **Color**: Node border/background
+   - **Icon**: Small node identifier (🔬🔴🔵)
+   - **System Prompt**: Model persona
+   - **Temperature**: Creative vs strict
 
 Supports any OpenAI-compatible API (DeepSeek, OpenAI, Ollama local models, etc.).
 
