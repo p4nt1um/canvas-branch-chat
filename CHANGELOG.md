@@ -1,5 +1,40 @@
 # Canvas Branch Chat — 版本历史
 
+## 0.4.4 (2026-08-07)
+**彻底清理审核问题 + 修复导出弹窗**
+
+### 🐛 修复
+- **彻底移除 fs 模块** — loadEnvFile 改用 Vault adapter API，消除 "Direct Filesystem Access" warning
+- **修复硬编码 .obsidian 路径** — 改用 `configDir` + `manifest.dir`
+- **导出配置弹窗改用 Setting API** — 修复控件不显示问题
+
+### ✅ 社区审核项
+- 无 fs/electron 直接文件系统访问
+- 无硬编码 .obsidian 路径
+- 无插件层 createElement / 直接 style 赋值
+
+---
+
+## 0.4.3 (2026-08-06)
+**导出配置弹窗修复（Setting API）**
+
+### 🐛 修复
+- 导出配置弹窗改用 Obsidian Setting API（与 branch-modal 保持一致）
+- 移除自定义 DOM 操作，避免主题 CSS 覆盖问题
+- 添加信息展示 Setting（节点数/文件大小/功能状态）
+
+---
+
+## 0.4.2 (2026-08-06)
+**通过 Obsidian 社区审核**
+
+### 🔧 修复
+- 移除 @electron/remote 和 fs 直接文件系统访问
+- 使用 app.vault.create() 保存文件到 Vault
+- 修复直接设置 style 属性 → setCssProps
+
+---
+
 ## 0.4.1 (2026-08-06)
 **导出配置弹窗 UI 修复**
 

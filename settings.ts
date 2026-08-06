@@ -7,8 +7,6 @@
  * 3. 设置页 UI 改为动态模型列表
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import CanvasBranchChatPlugin from './main';
 import { PluginSettingTab, Setting, Notice } from 'obsidian';
 import { ModelConfig, PluginSettingsV2, PROVIDER_DEFAULTS, COLOR_PRESETS, BranchFramework, DEFAULT_FRAMEWORKS } from './types';
@@ -184,29 +182,42 @@ export default class SettingsManager {
    * 加载 .env 文件并缓存（四层降级的一部分）
    * 优先从插件目录读取（隔离、不和其他插件冲突），
    * 降级到 vault 根目录向后兼容旧用户。
+   *
+   * 注意：仅使用 Obsidian Vault adapter API，避免直接文件系统访问，
+   * 以符合 Obsidian 社区插件审核规范（reviewer 会标记 fs 模块使用）。
    */
   private async loadEnvFile(): Promise<void> {
+    const adapter = this.plugin.app.vault.adapter;
+
     // 1. 优先：插件目录 .env（隔离，不和其它插件打架）
     try {
-      const vaultBasePath = (this.plugin.app.vault.adapter as any).basePath || '';
-      const pluginEnvPath = path.join(vaultBasePath, '.obsidian', 'plugins', 'canvas-branch-chat', '.env');
-      const content = await fs.promises.readFile(pluginEnvPath, 'utf-8');
-      this.envCache = this.parseEnvContent(content);
-      console.log('[Canvas Branch Chat] Loaded .env from plugin directory');
-      return;
+      // 使用 configDir 获取当前配置目录（不一定是 .obsidian，用户可自定义）
+      const configDir = this.plugin.app.vault.configDir;
+      const pluginsDir = this.plugin.manifest.dir || configDir;
+      const pluginEnvPath = `${pluginsDir}/.env`;
+      if (await adapter.exists(pluginEnvPath)) {
+        const content = await adapter.read(pluginEnvPath);
+        this.envCache = this.parseEnvContent(content);
+        console.log('[Canvas Branch Chat] Loaded .env from plugin directory');
+        return;
+      }
     } catch {
       // 插件目录无 .env，继续降级
     }
 
     // 2. 降级：vault 根目录 .env（向后兼容旧版用户）
     try {
-      const envFile = await this.plugin.app.vault.adapter.read('.env');
-      this.envCache = this.parseEnvContent(envFile);
-      console.log('[Canvas Branch Chat] Loaded .env from vault root (fallback)');
-      return;
+      if (await adapter.exists('.env')) {
+        const envFile = await adapter.read('.env');
+        this.envCache = this.parseEnvContent(envFile);
+        console.log('[Canvas Branch Chat] Loaded .env from vault root (fallback)');
+        return;
+      }
     } catch {
-      this.envCache = {};
+      // vault 根目录无 .env
     }
+
+    this.envCache = {};
   }
 
   /** 从模型配置解析 API Key（四层降级：直接 Key → 插件 .env → vault .env → process.env） */
