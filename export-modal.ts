@@ -1,8 +1,8 @@
 /**
- * 导出配置弹窗
+ * 导出配置弹窗 — 使用 Obsidian Setting API（与其他 Modal 保持一致）
  */
 
-import { App, Modal, Notice } from 'obsidian';
+import { App, Modal, Notice, Setting, DropdownComponent } from 'obsidian';
 import type { ExportConfig } from './export-types';
 import { DEFAULT_CONFIG } from './export-types';
 
@@ -25,8 +25,8 @@ export class ExportConfigModal extends Modal {
   }
 
   private calcEstimatedSize(): string {
-    const baseSize = 35; // KB（HTML + CSS + JS）
-    const perNodeSize = 0.5; // KB
+    const baseSize = 35;
+    const perNodeSize = 0.5;
     const total = baseSize + this.nodeCount * perNodeSize;
     if (total < 100) return `~${Math.round(total)} KB`;
     return `~${(total / 1000).toFixed(1)} MB`;
@@ -38,130 +38,112 @@ export class ExportConfigModal extends Modal {
     contentEl.empty();
 
     // 标题
-    contentEl.createEl('h3', { text: '📥 导出交互式 HTML' });
+    new Setting(contentEl)
+      .setName('📥 导出交互式 HTML')
+      .setHeading();
 
-    // === 视图模式 ===
-    this.addSectionLabel(contentEl, '📊 视图模式');
-    const viewSelect = this.addSelect(contentEl, '默认视图', [
-      { value: 'flow', label: '🌊 流式对话视图（推荐）' },
-      { value: 'tree', label: '🌳 分支树视图（高级）' },
-    ], this.config.viewMode);
-    viewSelect.addEventListener('change', () => {
-      this.config.viewMode = viewSelect.value as 'flow' | 'tree';
-    });
+    // 视图模式
+    new Setting(contentEl)
+      .setName('视图模式')
+      .setDesc('默认显示的视图模式')
+      .addDropdown((dropdown: DropdownComponent) => {
+        dropdown
+          .addOption('flow', '🌊 流式对话视图（推荐）')
+          .addOption('tree', '🌳 分支树视图（高级）')
+          .setValue(this.config.viewMode)
+          .onChange(value => {
+            this.config.viewMode = value as 'flow' | 'tree';
+          });
+      });
 
-    // === 主题 ===
-    this.addSectionLabel(contentEl, '🎨 主题');
-    const themeSelect = this.addSelect(contentEl, '默认主题', [
-      { value: 'auto', label: '🌓 跟随系统' },
-      { value: 'light', label: '☀️ 亮色' },
-      { value: 'dark', label: '🌙 暗色' },
-    ], this.config.theme);
-    themeSelect.addEventListener('change', () => {
-      this.config.theme = themeSelect.value as 'light' | 'dark' | 'auto';
-    });
+    // 主题
+    new Setting(contentEl)
+      .setName('主题')
+      .setDesc('HTML 文件的默认主题')
+      .addDropdown((dropdown: DropdownComponent) => {
+        dropdown
+          .addOption('auto', '🌓 跟随系统')
+          .addOption('light', '☀️ 亮色')
+          .addOption('dark', '🌙 暗色')
+          .setValue(this.config.theme)
+          .onChange(value => {
+            this.config.theme = value as 'light' | 'dark' | 'auto';
+          });
+      });
 
-    // === 功能开关 ===
-    this.addSectionLabel(contentEl, '⚙️ 功能开关');
+    // 分隔
+    new Setting(contentEl).setName('功能开关').setHeading();
 
-    const toggleToggle = this.addToggle(contentEl, '📋 节点展开/收起', this.config.includeToggle);
-    toggleToggle.input.addEventListener('change', () => {
-      this.config.includeToggle = toggleToggle.input.checked;
-    });
+    // 节点展开/收起
+    new Setting(contentEl)
+      .setName('📋 节点展开/收起')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.config.includeToggle)
+          .onChange(value => {
+            this.config.includeToggle = value;
+          });
+      });
 
-    const replayToggle = this.addToggle(contentEl, '▶️ 对话回放', this.config.includeReplay);
-    replayToggle.input.addEventListener('change', () => {
-      this.config.includeReplay = replayToggle.input.checked;
-    });
+    // 对话回放
+    new Setting(contentEl)
+      .setName('▶️ 对话回放')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.config.includeReplay)
+          .onChange(value => {
+            this.config.includeReplay = value;
+          });
+      });
 
-    const searchToggle = this.addToggle(contentEl, '🔍 搜索功能', this.config.includeSearch);
-    searchToggle.input.addEventListener('change', () => {
-      this.config.includeSearch = searchToggle.input.checked;
-    });
+    // 搜索功能
+    new Setting(contentEl)
+      .setName('🔍 搜索功能')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.config.includeSearch)
+          .onChange(value => {
+            this.config.includeSearch = value;
+          });
+      });
 
-    // === 导出信息 ===
-    contentEl.createEl('hr');
-    const infoDiv = contentEl.createDiv({ cls: 'export-info' });
-    infoDiv.createEl('p', { text: `📊 节点数: ${this.nodeCount}` });
-    infoDiv.createEl('p', { text: `📦 预估文件大小: ${this.estimatedSize}` });
-    infoDiv.createEl('p', { text: `✅ Markdown 渲染已启用` });
-    infoDiv.createEl('p', { text: `📱 移动端适配已启用` });
+    // 导出信息
+    new Setting(contentEl).setName('导出信息').setHeading();
 
-    // === 按钮 ===
-    const buttonDiv = contentEl.createDiv({ cls: 'export-buttons' });
+    new Setting(contentEl)
+      .setName('节点数')
+      .setDesc(`${this.nodeCount} 个节点`);
 
-    const cancelBtn = buttonDiv.createEl('button', { text: '取消' });
-    cancelBtn.addEventListener('click', () => this.close());
+    new Setting(contentEl)
+      .setName('预估文件大小')
+      .setDesc(this.estimatedSize);
 
-    const exportBtn = buttonDiv.createEl('button', {
-      text: '📥 导出',
-      cls: 'mod-cta'
-    });
-    exportBtn.addEventListener('click', () => {
-      this.onConfirm(this.config);
-      this.close();
-    });
-  }
+    new Setting(contentEl)
+      .setName('Markdown 渲染')
+      .setDesc('已启用（marked.js 预渲染）');
 
-  /** 添加分组标签 */
-  private addSectionLabel(container: HTMLElement, text: string): void {
-    const label = container.createDiv({ cls: 'setting-item-description' });
-    label.createEl('strong', { text });
-    label.setCssProps({ marginTop: '12px', marginBottom: '4px' });
-  }
+    new Setting(contentEl)
+      .setName('移动端适配')
+      .setDesc('已启用（响应式 + 触摸优化）');
 
-  /** 添加下拉选择框 */
-  private addSelect(
-    container: HTMLElement,
-    name: string,
-    options: { value: string; label: string }[],
-    defaultValue: string
-  ): HTMLSelectElement {
-    const wrapper = container.createDiv({ cls: 'export-setting-row' });
-
-    const label = wrapper.createEl('label', { cls: 'export-label' });
-    label.textContent = name;
-
-    const select = wrapper.createEl('select', { cls: 'dropdown' });
-    options.forEach(opt => {
-      const optionEl = select.createEl('option', { value: opt.value, text: opt.label });
-      if (opt.value === defaultValue) optionEl.selected = true;
-    });
-
-    return select;
-  }
-
-  /** 添加开关 */
-  private addToggle(
-    container: HTMLElement,
-    name: string,
-    defaultValue: boolean
-  ): { input: HTMLInputElement; wrapper: HTMLElement } {
-    const wrapper = container.createDiv({ cls: 'export-setting-row' });
-
-    const label = wrapper.createEl('label', { cls: 'export-label' });
-    label.textContent = name;
-
-    const toggleDiv = wrapper.createDiv({ cls: 'checkbox-container' });
-    const input = toggleDiv.createEl('input', {
-      type: 'checkbox',
-      cls: 'checkbox-input'
-    }) as HTMLInputElement;
-    input.checked = defaultValue;
-
-    // Obsidian checkbox UI
-    if (input.checked) {
-      toggleDiv.addClass('is-enabled');
-    }
-    input.addEventListener('change', () => {
-      if (input.checked) {
-        toggleDiv.addClass('is-enabled');
-      } else {
-        toggleDiv.removeClass('is-enabled');
-      }
-    });
-
-    return { input, wrapper };
+    // 按钮
+    new Setting(contentEl)
+      .addButton(btn => {
+        btn
+          .setButtonText('取消')
+          .onClick(() => this.close());
+        return btn;
+      })
+      .addButton(btn => {
+        btn
+          .setButtonText('📥 导出')
+          .setCta()
+          .onClick(() => {
+            this.onConfirm(this.config);
+            this.close();
+          });
+        return btn;
+      });
   }
 
   onClose() {
@@ -179,9 +161,8 @@ export async function saveExportFile(
 ): Promise<void> {
   try {
     const vault = app.vault;
-    const filePath = defaultName;
-    await vault.create(filePath, content);
-    new Notice('✅ 已导出到 Vault: ' + filePath);
+    await vault.create(defaultName, content);
+    new Notice('✅ 已导出到 Vault: ' + defaultName);
   } catch (error) {
     console.error('导出失败:', error);
     new Notice('❌ 导出失败: ' + (error as Error).message);
