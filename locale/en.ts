@@ -17,6 +17,7 @@ export const en: Record<string, string> = {
   'menu.followUp': '💬 Follow up',
   'menu.submitAI': '🤖 Submit to AI',
   'menu.export': '📥 Export conversation',
+  'menu.exportHTML': '🌐 Export interactive HTML',
   'menu.replay': '▶️ Replay',
   'menu.mergeN': '🔀 Merge {n} branches',
 
@@ -150,6 +151,11 @@ export const en: Record<string, string> = {
   'export.direction': 'Direction: {dir}',
   'export.branches': '*({n} branches below)*',
   'export.fileName': 'conversation_export_{date}.md',
+  'exportHTML.title': '📥 Export Interactive HTML',
+  'exportHTML.defaultName': '{root}_export_{date}.html',
+  'exportHTML.success': '✅ Exported: {path}',
+  'exportHTML.fail': '❌ Export failed: {error}',
+  'exportHTML.empty': '⚠️ Canvas is empty, nothing to export',
   'export.truncated': '\n\n[... truncated ...]',
 
   // ── Skills ──

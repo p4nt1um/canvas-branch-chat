@@ -1,5 +1,57 @@
 # Canvas Branch Chat — 版本历史
 
+## v0.4.0 (2026-08-06)
+**导出交互式 HTML + 移动端适配**
+
+### 新功能
+- **导出交互式 HTML** (#20)
+  - 右键节点 → 🌐 导出交互式 HTML
+  - 流式对话视图（默认）+ 分支树视图
+  - 移动端适配（响应式布局 + 触摸优化）
+  - 亮色/暗色主题切换（跟随系统）
+
+- **Markdown 预渲染**
+  - 导出时用 marked.js 转换为 HTML
+  - 生成的 HTML 文件不嵌入 JS 库，轻量（~30KB）
+  - 支持标题、列表、代码块、表格、引用等
+
+- **对话回放功能**
+  - 逐步高亮节点（1秒/节点）
+  - 自动滚动到当前节点
+  - 回放速度可调（0.5x / 1x / 2x）
+  - 进度条显示
+
+- **全文搜索功能**
+  - 实时搜索节点内容
+  - 搜索结果黄色高亮
+  - 上一个/下一个结果导航
+  - 键盘快捷键（Enter/Escape）
+
+### 文件变更
+- `canvas-extension.ts` +30 行：新增导出 HTML 菜单项
+- `locale/zh.ts` +7 行：新增中文翻译
+- `locale/en.ts` +7 行：新增英文翻译
+- `export-types.ts` 新增 +49 行：数据结构定义
+- `export-converter.ts` 新增 +226 行：Canvas → ExportNode 转换
+- `export-styles.ts` 新增 +769 行：CSS 样式（响应式 + 暗色主题 + 移动端）
+- `export-html.ts` 新增 +296 行：HTML 生成（流式/树形视图）
+- `export-interactive.ts` 新增 +344 行：JS 交互（回放/搜索/主题/手势）
+- `export-modal.ts` 新增 +167 行：导出配置弹窗
+- `export-html-main.ts` 新增 +117 行：主入口（marked.js 预渲染）
+
+### 技术细节
+- 使用 `marked.js` 预渲染 Markdown → HTML
+- CSS 变量实现主题切换（`--bg`, `--text`, `--accent`）
+- 移动端优先响应式设计（`@media max-width: 768px`）
+- 触摸优化（最小触摸区域 44px）
+- 单文件 HTML（CSS/JS 内嵌）
+- 文件名：`根节点第一句话_YYYYMMDD_HHMMSS.html`
+
+### 依赖变更
+- 新增 `marked` (Markdown 渲染库)
+
+---
+
 ## v0.3.4 (2026-07-27)
 **跨平台 API Key 解决方案**
 

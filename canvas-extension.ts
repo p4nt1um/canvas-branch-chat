@@ -128,6 +128,20 @@ export default class CanvasBranchExtension {
       item.onClick(() => exportCanvasConversation(this.plugin.app, cv, node.id));
     });
 
+    // #20: 导出交互式 HTML
+    menu.addItem((item: MenuItem) => {
+      item.setTitle(t('menu.exportHTML'));
+      item.setIcon('globe');
+      item.onClick(() => {
+        import('./export-html-main').then(m => {
+          void m.exportInteractiveHTML(this.plugin.app, cv, node.id);
+        }).catch(err => {
+          console.error('加载导出模块失败:', err);
+          new Notice('❌ 导出模块加载失败');
+        });
+      });
+    });
+
     // P2 #14: 对话回放
     menu.addItem((item: MenuItem) => {
       item.setTitle(t('menu.replay'));

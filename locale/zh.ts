@@ -17,6 +17,7 @@ export const zh: Record<string, string> = {
   'menu.followUp': '💬 继续追问',
   'menu.submitAI': '🤖 提交到 AI',
   'menu.export': '📥 导出对话树',
+  'menu.exportHTML': '🌐 导出交互式 HTML',
   'menu.replay': '▶️ 回放对话',
   'menu.mergeN': '🔀 合并 {n} 个分支',
 
@@ -150,6 +151,11 @@ export const zh: Record<string, string> = {
   'export.direction': '方向：{dir}',
   'export.branches': '*(以下 {n} 条分支)*',
   'export.fileName': '对话导出_{date}.md',
+  'exportHTML.title': '📥 导出交互式 HTML',
+  'exportHTML.defaultName': '{root}_导出_{date}.html',
+  'exportHTML.success': '✅ 导出完成: {path}',
+  'exportHTML.fail': '❌ 导出失败: {error}',
+  'exportHTML.empty': '⚠️ Canvas 为空，无法导出',
   'export.truncated': '\n\n[... 已截取 ...]',
 
   // ── Skills ──
