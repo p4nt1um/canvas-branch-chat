@@ -342,3 +342,94 @@
 .replay-bar-exit:hover {
   opacity: 0.85;
 }
+
+/* ============================================================ */
+/* #20: 导出 HTML 配置弹窗                                       */
+/* ============================================================ */
+
+.export-config-modal {
+  padding: 8px 16px 16px;
+  min-width: 360px;
+}
+
+.export-config-modal h3 {
+  margin-bottom: 16px;
+}
+
+.export-config-modal .setting-item-description {
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.export-config-modal hr {
+  margin: 16px 0;
+}
+
+/* 配置行 */
+.export-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.export-label {
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+  color: var(--text-normal);
+}
+
+/* 下拉框 */
+.export-setting-row select.dropdown {
+  min-width: 200px;
+  padding: 4px 8px;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+}
+
+/* checkbox 复用 Obsidian 原生样式 */
+.export-setting-row .checkbox-container {
+  flex-shrink: 0;
+}
+
+/* 导出信息 */
+.export-info {
+  margin: 12px 0;
+}
+
+.export-info p {
+  margin: 4px 0;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+/* 按钮区 */
+.export-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.export-buttons button {
+  padding: 6px 20px;
+  border-radius: 4px;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.export-buttons button:first-child {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.export-buttons button:last-child {
+  background: var(--interactive-accent);
+  border: 1px solid var(--interactive-accent);
+  color: var(--text-on-accent);
+}
