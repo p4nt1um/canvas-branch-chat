@@ -107,8 +107,7 @@ export class ExportConfigModal extends Modal {
   private addSectionLabel(container: HTMLElement, text: string): void {
     const label = container.createDiv({ cls: 'setting-item-description' });
     label.createEl('strong', { text });
-    label.style.marginTop = '12px';
-    label.style.marginBottom = '4px';
+    label.setCssProps({ marginTop: '12px', marginBottom: '4px' });
   }
 
   /** 添加下拉选择框 */
@@ -171,7 +170,7 @@ export class ExportConfigModal extends Modal {
 }
 
 /**
- * 弹出文件保存对话框，导出 HTML
+ * 保存导出 HTML 到 Vault
  */
 export async function saveExportFile(
   app: App,
@@ -179,27 +178,10 @@ export async function saveExportFile(
   defaultName: string
 ): Promise<void> {
   try {
-    // 尝试 Electron 对话框
-    const { dialog } = require('@electron/remote') || {};
-
-    if (dialog) {
-      const result = await dialog.showSaveDialog({
-        defaultPath: defaultName,
-        filters: [{ name: 'HTML 文件', extensions: ['html'] }]
-      });
-
-      if (result.canceled || !result.filePath) return;
-
-      const fs = require('fs');
-      fs.writeFileSync(result.filePath, content, 'utf-8');
-      new Notice('✅ 导出完成: ' + result.filePath);
-    } else {
-      // 回退：保存到 Vault
-      const vault = app.vault;
-      const filePath = `${defaultName}`;
-      await vault.create(filePath, content);
-      new Notice('✅ 已导出到 Vault: ' + filePath);
-    }
+    const vault = app.vault;
+    const filePath = defaultName;
+    await vault.create(filePath, content);
+    new Notice('✅ 已导出到 Vault: ' + filePath);
   } catch (error) {
     console.error('导出失败:', error);
     new Notice('❌ 导出失败: ' + (error as Error).message);
