@@ -80,6 +80,13 @@ export const zh: Record<string, string> = {
   'settings.truncateCharsDesc': '超过 N 个的 AI 回答截取前 M 字发送',
   'settings.summaryGuide': '金字塔摘要引导',
   'settings.summaryGuideDesc': '在 system prompt 中引导 AI 先概括再展开，配合截取不丢信息',
+
+  // ── P1 #13: AI 回答节点自动宽高 ──
+  'settings.autoFit': '📐 AI 回答自动宽高',
+  'settings.autoFitEnabled': '启用自动宽高适配',
+  'settings.autoFitEnabledDesc': 'AI 回答流式结束后自动调整节点尺寸（宽度 = 窗口 40%，限 400–900px；高度按内容）',
+  'settings.autoFitMaxHeight': '自动高度软上限',
+  'settings.autoFitMaxHeightDesc': '节点高度上限（px），超出部分在节点内容区滚动',
   'settings.alias': '别名',
   'settings.aliasDesc': '显示名（如"分析师"、"魔鬼代言人"）',
   'settings.provider': '服务商',

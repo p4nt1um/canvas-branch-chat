@@ -44,6 +44,8 @@ export const DEFAULT_SETTINGS_V2: PluginSettingsV2 = {
   contextRecentFull: 3,
   contextTruncateChars: 500,
   summaryGuidance: true,
+  autoFitEnabled: true,
+  autoFitMaxHeight: 600,
   language: 'auto',
 };
 
@@ -287,6 +289,16 @@ export default class SettingsManager {
     return this.settings.summaryGuidance ?? true;
   }
 
+  /** P1 #13: 自动宽高适配开关 */
+  getAutoFitEnabled(): boolean {
+    return this.settings.autoFitEnabled ?? true;
+  }
+
+  /** P1 #13: 自动高度软上限（px） */
+  getAutoFitMaxHeight(): number {
+    return this.settings.autoFitMaxHeight ?? 600;
+  }
+
   /** 获取语言设置 */
   getLanguage(): 'auto' | 'zh' | 'en' {
     return this.settings.language || 'auto';
@@ -455,6 +467,32 @@ class SettingsTab extends PluginSettingTab {
           .setValue(this.manager.getSummaryGuidance())
           .onChange((value) => {
             void this.manager.setSettings({ summaryGuidance: value });
+          });
+      });
+
+    // P1 #13: AI 回答节点自动宽高适配
+    new Setting(containerEl).setName(t('settings.autoFit')).setHeading();
+
+    new Setting(containerEl)
+      .setName(t('settings.autoFitEnabled'))
+      .setDesc(t('settings.autoFitEnabledDesc'))
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.manager.getAutoFitEnabled())
+          .onChange((value) => {
+            void this.manager.setSettings({ autoFitEnabled: value });
+          });
+      });
+
+    new Setting(containerEl)
+      .setName(t('settings.autoFitMaxHeight'))
+      .setDesc(t('settings.autoFitMaxHeightDesc'))
+      .addSlider((slider) => {
+        slider
+          .setLimits(200, 2000, 50)
+          .setValue(this.manager.getAutoFitMaxHeight())
+          .onChange((value) => {
+            void this.manager.setSettings({ autoFitMaxHeight: value });
           });
       });
   }

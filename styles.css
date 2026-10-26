@@ -433,3 +433,14 @@
   border: 1px solid var(--interactive-accent);
   color: var(--text-on-accent);
 }
+
+/* ============================================================ */
+/* P1 #13: AI 回答节点自动宽高适配                                */
+/* ============================================================ */
+
+/* 超出高度软上限的节点（auto-size.ts 打标记）：内容区可滚动。
+   只作用于打标记的节点，不影响其他 Canvas 节点 */
+.cbz-autofit-scroll .canvas-node-content,
+.cbz-autofit-scroll.canvas-node-content {
+  overflow-y: auto;
+}

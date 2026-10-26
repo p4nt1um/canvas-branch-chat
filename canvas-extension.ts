@@ -22,6 +22,7 @@ import { parseSkillTag } from './skill-scanner';
 import { MergeModal } from './merge-modal';
 import { FollowUpModal } from './follow-up-modal';
 import { ReplayController } from './replay';
+import { scheduleAutoFitNodeSize } from './auto-size';
 import { t } from './locale';
 
 export default class CanvasBranchExtension {
@@ -304,6 +305,8 @@ export default class CanvasBranchExtension {
           });
           // P1 #10: AI 回答完成后设置摘要
           this.setNodeSummary(answerNode, fullText, model);
+          // P1 #13: 自动宽高适配
+          this.autoFitAnswerNodeSize(answerNode);
         } catch (error) {
           console.error('Branch Chat: API error', error);
           answerNode.setText(`❌ 请求失败: ${error}`);
@@ -439,6 +442,8 @@ export default class CanvasBranchExtension {
               this.autoFitHeight(answerNode);
             });
             this.setNodeSummary(answerNode, fullText, model);
+            // P1 #13: 自动宽高适配
+            this.autoFitAnswerNodeSize(answerNode);
           } catch (error) {
             console.error('Branch Chat: follow-up API error', error);
             answerNode.setText(`❌ 请求失败: ${error}`);
@@ -513,6 +518,8 @@ export default class CanvasBranchExtension {
       });
       // P1 #10: 设置摘要
       this.setNodeSummary(answerNode, fullText, model);
+      // P1 #13: 自动宽高适配
+      this.autoFitAnswerNodeSize(answerNode);
     } catch (error) {
       console.error('Branch Chat: API error', error);
       answerNode.setText(`❌ 请求失败: ${error}`);
@@ -555,6 +562,21 @@ export default class CanvasBranchExtension {
     if (actualHeight > nodeData.height) {
       node.setData({ ...nodeData, height: actualHeight });
     }
+  }
+
+  // ============================================================
+  // P1 #13: AI 回答节点自动宽高适配
+  // ============================================================
+
+  /**
+   * 流式结束后自动适配节点宽高（设置可控：开关 + 高度软上限）。
+   * 只在流式结束时调用一次，流式过程中不调（防抖动）。
+   */
+  private autoFitAnswerNodeSize(node: CanvasRuntimeNode): void {
+    scheduleAutoFitNodeSize(node, {
+      enabled: this.plugin.settings.getAutoFitEnabled(),
+      maxHeight: this.plugin.settings.getAutoFitMaxHeight(),
+    });
   }
 
   // ============================================================
@@ -722,6 +744,8 @@ export default class CanvasBranchExtension {
         this.autoFitHeight(summaryNode);
       });
       this.setNodeSummary(summaryNode, fullText, model);
+      // P1 #13: 自动宽高适配
+      this.autoFitAnswerNodeSize(summaryNode);
     } catch (error) {
       console.error('Branch Chat: merge API error', error);
       summaryNode.setText(`❌ 请求失败: ${error}`);

@@ -80,6 +80,13 @@ export const en: Record<string, string> = {
   'settings.truncateCharsDesc': 'AI responses beyond N are truncated to first M characters',
   'settings.summaryGuide': 'Pyramid summary guidance',
   'settings.summaryGuideDesc': 'Guide AI to summarize first, then expand. Helps preserve info with truncation.',
+
+  // ── P1 #13: AI answer auto-fit size ──
+  'settings.autoFit': '📐 AI answer auto size',
+  'settings.autoFitEnabled': 'Enable auto-fit size',
+  'settings.autoFitEnabledDesc': 'Resize answer nodes after streaming ends (width = 40% of window, clamped to 400–900px; height fits content)',
+  'settings.autoFitMaxHeight': 'Auto height cap',
+  'settings.autoFitMaxHeightDesc': 'Node height cap in px; overflow scrolls inside the node',
   'settings.alias': 'Alias',
   'settings.aliasDesc': 'Display name (e.g., "Analyst", "Devil\'s Advocate")',
   'settings.provider': 'Provider',

@@ -340,6 +340,10 @@ export interface PluginSettingsV2 {
   contextTruncateChars?: number;
   /** P2 #15: system prompt 摘要引导开关 */
   summaryGuidance?: boolean;
+  /** P1 #13: AI 回答节点自动宽高适配（流式结束后回写节点尺寸） */
+  autoFitEnabled?: boolean;
+  /** P1 #13: 自动高度软上限（px），超出则内容区滚动 */
+  autoFitMaxHeight?: number;
 
   /** 界面语言（'auto' = 跟随系统） */
   language?: 'auto' | 'zh' | 'en';
