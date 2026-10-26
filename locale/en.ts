@@ -127,6 +127,9 @@ export const en: Record<string, string> = {
   'notice.notEnoughNodes': 'Not enough nodes found',
   'notice.mergeDefaultPrompt': 'Please summarize the above',
   'notice.useMenu': 'Right-click a conversation node in Canvas → Export conversation',
+  'notice.noCanvasView': 'Open a Canvas view first, then tidy the layout',
+  'notice.noChatNodes': 'No conversation nodes on this canvas (create a branch chat first)',
+  'notice.layoutDone': '✅ Re-laid out {n} nodes',
 
   // ── Replay controls ──
   'replay.speedSlow': 'Slow',
@@ -172,4 +175,5 @@ export const en: Record<string, string> = {
 
   // ── Commands ──
   'command.exportName': 'Export current Canvas conversation as Markdown',
+  'command.layoutName': 'Tidy canvas layout',
 };

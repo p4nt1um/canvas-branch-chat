@@ -127,6 +127,9 @@ export const zh: Record<string, string> = {
   'notice.notEnoughNodes': '未能找到足够的节点',
   'notice.mergeDefaultPrompt': '请对以上内容进行总结',
   'notice.useMenu': '请在 Canvas 中右键对话节点 → 导出对话树',
+  'notice.noCanvasView': '请先打开一个 Canvas 视图，再整理布局',
+  'notice.noChatNodes': '当前画布没有对话节点（先右键创建分支对话）',
+  'notice.layoutDone': '✅ 已重排 {n} 个节点',
 
   // ── 回放控制条 ──
   'replay.speedSlow': '慢',
@@ -172,4 +175,5 @@ export const zh: Record<string, string> = {
 
   // ── 命令 ──
   'command.exportName': '导出当前 Canvas 对话树为 Markdown',
+  'command.layoutName': '整理画布布局',
 };

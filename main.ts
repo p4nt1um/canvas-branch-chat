@@ -8,6 +8,7 @@ import { Plugin, Notice } from 'obsidian';
 import SettingsManager from './settings';
 import CanvasBranchExtension from './canvas-extension';
 import { SkillScanner } from './skill-scanner';
+import { getActiveCanvasView, tidyTreeLayout } from './layout';
 import { t } from './locale';
 
 export default class CanvasBranchChatPlugin extends Plugin {
@@ -36,6 +37,25 @@ export default class CanvasBranchChatPlugin extends Plugin {
         // 注意：Obsidian API 不直接暴露 Canvas 视图类型
         // 用户主要通过右键菜单触发导出，这里作为补充入口
         new Notice(t('notice.useMenu'));
+      },
+    });
+
+    // P1 #12: 一键重排画布对话树
+    this.addCommand({
+      id: 'tidy-canvas-layout',
+      name: t('command.layoutName'),
+      callback: () => {
+        const canvas = getActiveCanvasView(this.app);
+        if (!canvas) {
+          new Notice(t('notice.noCanvasView'));
+          return;
+        }
+        const moved = tidyTreeLayout(canvas);
+        if (moved === 0) {
+          new Notice(t('notice.noChatNodes'));
+        } else {
+          new Notice(t('notice.layoutDone', { n: moved }));
+        }
       },
     });
 
