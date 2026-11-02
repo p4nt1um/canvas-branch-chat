@@ -1,3 +1,4 @@
+import { renderSiwc } from './siwc/ui';
 /**
  * settings.ts — 插件设置管理（P1 #5 多模型版本）
  *
@@ -224,6 +225,7 @@ export default class SettingsManager {
 
   /** 从模型配置解析 API Key（四层降级：直接 Key → 插件 .env → vault .env → process.env） */
   resolveApiKey(model: ModelConfig): string {
+    if (model.providerType === 'siwc') return 'siwc-session';
     // 1. 优先使用直接配置的 API Key（设置面板输入，最可靠）
     if (model.apiKey?.trim()) return model.apiKey.trim();
 
@@ -540,6 +542,9 @@ class SettingsTab extends PluginSettingTab {
           void this.manager.updateModel(model.id, { alias: value });
         });
       });
+
+    new Setting(body).setName('Authentication').addDropdown(d => d.addOptions({openai: 'API key', siwc: 'Continue with ChatGPT'}).setValue(model.providerType === 'siwc' ? 'siwc' : 'openai').onChange(v => { void this.manager.updateModel(model.id, { providerType: v as 'openai' | 'siwc', ...(v === 'siwc' ? { model: '', _availableModels: [] } : {}) }).then(() => this.display()); }));
+    if (model.providerType === 'siwc') { renderSiwc(body, model, patch => this.manager.updateModel(model.id, patch), () => this.display()); return; }
 
     // Provider
     new Setting(body)

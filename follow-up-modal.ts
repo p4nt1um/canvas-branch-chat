@@ -1,3 +1,4 @@
+import { RequestOptions, renderRequestOptions, applyRequestOptions } from './siwc/request-options';
 /**
  * follow-up-modal.ts — 追问输入弹窗
  *
@@ -18,10 +19,13 @@ export interface FollowUpModalResult {
   /** 智能追问候选问题列表 */
   candidates: string[];
   modelId: string;
+  requestOptions?: RequestOptions;
   confirmed: boolean;
 }
 
 export class FollowUpModal extends Modal {
+  private requestOptions: RequestOptions = {};
+  private optionsHost?: HTMLElement;
   private prompt: string = '';
   private candidates: string[] = [];
   private modelId: string;
@@ -92,9 +96,14 @@ export class FollowUpModal extends Modal {
           dropdown.setValue(this.modelId);
           dropdown.onChange((value) => {
             this.modelId = value;
+            this.requestOptions = {};
+            this.renderOptions();
           });
         });
     }
+
+    this.optionsHost = contentEl.createDiv();
+    this.renderOptions();
 
     // 操作按钮
     new Setting(contentEl)
@@ -107,6 +116,11 @@ export class FollowUpModal extends Modal {
       .addButton((btn) =>
         btn.setButtonText(t('common.cancel')).onClick(() => this.close()),
       );
+  }
+
+  private renderOptions() {
+    const model = this.models.find(m => m.id === this.modelId);
+    if (this.optionsHost && model) renderRequestOptions(this.optionsHost, model, this.requestOptions, value => this.requestOptions = value);
   }
 
   /** P2 #22: 从 AI 祖先节点提取候选问题 */
@@ -208,7 +222,7 @@ export class FollowUpModal extends Modal {
     if (!model) return [];
 
     const apiKey = (this.canvas as unknown as { plugin?: { settings?: { resolveApiKey?: (m: { apiKeyEnvVar: string }) => string } } })?.plugin?.settings?.resolveApiKey?.(model)
-      || process.env[model.apiKeyEnvVar];
+      || (model.providerType === 'siwc' ? 'siwc-session' : process.env[model.apiKeyEnvVar]);
     if (!apiKey) return [];
 
     // 构建最近上下文
@@ -226,7 +240,7 @@ export class FollowUpModal extends Modal {
     ];
 
     try {
-      const provider = createProvider(model, apiKey);
+      const provider = createProvider(applyRequestOptions(model, this.requestOptions), apiKey);
       const result = await provider.streamChat(messages);
       // 解析每行一个问题
       const lines = result.split('\n')
@@ -319,6 +333,7 @@ export class FollowUpModal extends Modal {
       prompt: promptTrim,
       candidates: validCandidates,
       modelId: this.modelId,
+      requestOptions: this.requestOptions,
       confirmed: true,
     };
     this.close();

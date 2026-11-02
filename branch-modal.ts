@@ -1,3 +1,4 @@
+import { RequestOptions, renderRequestOptions } from './siwc/request-options';
 /**
  * branch-modal.ts — 分叉方向输入弹窗
  *
@@ -17,6 +18,7 @@ import { t, getLocale } from './locale';
 export interface BranchDirection {
   text: string;
   modelId: string;
+  requestOptions?: RequestOptions;
 }
 
 export interface BranchModalResult {
@@ -25,6 +27,7 @@ export interface BranchModalResult {
 }
 
 export class BranchModal extends Modal {
+  private requestOptions: RequestOptions[] = [];
   private directionTexts: string[] = [''];
   private directionModelIds: string[] = [];
   private result: BranchModalResult;
@@ -133,6 +136,7 @@ export class BranchModal extends Modal {
         dropdown.onChange((value) => {
           this.globalModelId = value;
           this.directionModelIds = this.directionTexts.map(() => value);
+          this.requestOptions = [];
           this.renderDirections();
         });
       });
@@ -160,9 +164,14 @@ export class BranchModal extends Modal {
           }
           dropdown.onChange((value) => {
             this.directionModelIds[index] = value;
+            this.requestOptions[index] = {};
+            this.renderDirections();
           });
         });
       }
+
+      const selected = this.models.find(m => m.id === (this.directionModelIds[index] || this.globalModelId));
+      if (selected) renderRequestOptions(this.directionsContainer!.createDiv(), selected, this.requestOptions[index] || {}, value => this.requestOptions[index] = value);
 
       // 方向文本输入
       setting.addText((textInput) => {
@@ -198,6 +207,7 @@ export class BranchModal extends Modal {
             .onClick(() => {
               this.directionTexts.splice(index, 1);
               this.directionModelIds.splice(index, 1);
+              this.requestOptions.splice(index, 1);
               this.renderDirections();
             });
         });
@@ -340,6 +350,7 @@ export class BranchModal extends Modal {
         valid.push({
           text,
           modelId: this.directionModelIds[i] || this.globalModelId,
+          requestOptions: this.requestOptions[i],
         });
       }
     }

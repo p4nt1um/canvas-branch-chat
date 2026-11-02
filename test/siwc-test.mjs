@@ -1,0 +1,24 @@
+import { build } from 'esbuild';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const result = await build({ entryPoints: ['siwc/protocol.ts'], bundle: true, platform: 'node', format: 'cjs', write: false });
+const module = { exports: {} };
+new Function('require', 'module', 'exports', result.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
+const { challenge, createAttempt, validateCallback, validateScopes, readResponses } = module.exports;
+assert.equal(challenge('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'), 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
+assert.throws(() => createAttempt('http://localhost:1455/auth/callback', 'urn:uuid:12345678-1234-4234-8234-123456789abc'));
+assert.throws(() => createAttempt('http://127.0.0.1:1455/auth/callback', 'urn:uuid:' + 'a'.repeat(48)));
+const a = createAttempt('http://127.0.0.1:1455/auth/callback', 'urn:uuid:12345678-1234-4234-8234-123456789abc');
+assert.notEqual(a.state, createAttempt(a.redirect, 'urn:uuid:12345678-1234-4234-8234-123456789abc').state);
+assert.throws(() => validateCallback(a.redirect + '?state=wrong', a));
+const callback = `${a.redirect}?state=${a.state}&code=test&client_id=oaiapp_test`;
+assert.equal(validateCallback(callback, a).get('client_id'), 'oaiapp_test');
+assert.throws(() => validateCallback(callback, a));
+assert.throws(() => validateScopes('openid'));
+validateScopes('openid offline_access resource.invoke chatgpt.tokens.use.direct');
+function stream(text) { const bytes = new TextEncoder().encode(text); return new ReadableStream({start(c) { for (const b of bytes) c.enqueue(new Uint8Array([b])); c.close(); }}); }
+assert.equal(await readResponses(stream('data: {"type":"response.output_text.delta","delta":"你好"}\r\n\r\ndata: {"type":"response.completed"}\r\n\r\n'), () => {}), '你好');
+await assert.rejects(readResponses(stream('data: {"type":"response.failed"}\n\n'), () => {}));
+await assert.rejects(readResponses(stream('data: {"type":"response.output_text.delta","delta":"partial"}\n\n'), () => {}));
+await assert.rejects(readResponses(stream('data: invalid\n\n'), () => {}));
+console.log('SIWC protocol assertions passed');

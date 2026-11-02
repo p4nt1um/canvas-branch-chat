@@ -1,3 +1,4 @@
+import { SiwcProvider } from './siwc-provider';
 /**
  * providers/index.ts — Provider 工厂 + 统一导出
  *
@@ -19,6 +20,8 @@ export function createProvider(model: ModelConfig, apiKey: string, resolvedBaseU
   const providerType = resolvedModel.providerType || 'openai';
 
   switch (providerType) {
+    case 'siwc':
+      return new SiwcProvider(model);
     case 'openai':
       return new OpenAIProvider(resolvedModel, apiKey);
     // 未来扩展点:

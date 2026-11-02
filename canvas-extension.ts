@@ -1,3 +1,4 @@
+import { applyRequestOptions } from './siwc/request-options';
 /**
  * canvas-extension.ts — Canvas 分支对话扩展
  *
@@ -242,7 +243,8 @@ export default class CanvasBranchExtension {
     // 为每个方向创建 AI 回答节点 + 连线
     const branches = directions.map((dir, i) => {
       // 按方向取模型
-      const model = this.plugin.settings.getModel(dir.modelId) || this.plugin.settings.getDefaultModel();
+      const baseModel = this.plugin.settings.getModel(dir.modelId) || this.plugin.settings.getDefaultModel();
+      const model = baseModel ? applyRequestOptions(baseModel, dir.requestOptions) : undefined;
       if (!model) return null;
       const apiKey = this.plugin.settings.resolveApiKey(model);
       if (!apiKey) return null;
@@ -344,8 +346,9 @@ export default class CanvasBranchExtension {
 
         void (async () => {
 
-        const model = this.plugin.settings.getModel(result.modelId)
+        const baseModel = this.plugin.settings.getModel(result.modelId)
           || this.plugin.settings.getDefaultModel();
+        const model = baseModel ? applyRequestOptions(baseModel, result.requestOptions) : undefined;
         if (!model) {
           new Notice(t('notice.noModel'));
           return;

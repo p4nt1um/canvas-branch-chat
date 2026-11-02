@@ -169,7 +169,7 @@ export interface ChatProvider {
 }
 
 /** Provider 执行模式 */
-export type ProviderType = 'openai' | 'claude-cli';
+export type ProviderType = 'openai' | 'claude-cli' | 'siwc';
 
 /** Skills 集成：解析后的 SKILL.md 信息 */
 export interface SkillInfo {
@@ -248,6 +248,7 @@ export interface ModelConfig {
   providerType?: ProviderType;
   /** 测试连接后拉取到的可用模型列表（运行时缓存，不持久化） */
   _availableModels?: string[];
+  reasoningEffort?: string;
 }
 
 /** 模型预设组 */
