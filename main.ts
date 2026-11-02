@@ -1,3 +1,7 @@
+import { desktopFetch } from './siwc/desktop-fetch';
+import { SiwcSession, configureSession } from './siwc/session';
+import { SecureStore } from './siwc/storage';
+import { join } from 'path';
 /**
  * main.ts — Obsidian Canvas Branch Chat 插件入口
  *
@@ -17,11 +21,19 @@ export default class CanvasBranchChatPlugin extends Plugin {
   skillScanner: SkillScanner;
 
   async onload() {
+    try {
+      const electron: any = require('electron');
+      const runtime = electron.remote || (electron.app ? electron : require('@electron/remote'));
+      const encryption = runtime.safeStorage;
+      const root = join(runtime.app.getPath('userData'), 'canvas-branch-chat-siwc');
+      const session = new SiwcSession(new SecureStore(root, encryption), url => runtime.shell.openExternal(url), desktopFetch(url => runtime.session.defaultSession.resolveProxy(url)));
+      configureSession(session);
+      this.register(() => { session.stop(); configureSession(undefined); });
+    } catch { configureSession(undefined); }
     // 1. 加载设置
     this.settings = new SettingsManager(this);
     await this.settings.loadSettings();
     this.settings.addSettingsTab();
-
     // 2. 初始化 Skills 扫描器
     this.skillScanner = new SkillScanner(this.app.vault);
     this.skillScanner.scan().catch(() => {});

@@ -7,7 +7,9 @@
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"build-only": "node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"test": "node test/siwc-test.mjs && node test/siwc-integration.mjs && node test/unit-test.mjs && node test/request-options.mjs",
+		"typecheck": "tsc -noEmit -skipLibCheck"
 	},
 	"keywords": [
 		"obsidian",
@@ -28,6 +30,8 @@
 		"typescript": "5.6.3"
 	},
 	"dependencies": {
+		"https-proxy-agent": "^7.0.6",
+		"jose": "^5.10.0",
 		"marked": "^18.0.9"
 	}
 }
